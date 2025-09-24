@@ -47,6 +47,35 @@ class AssetController extends Controller
         ]);
     }
 
+    // Generate next asset code preview for admin UI
+    public function nextCode(Request $request)
+    {
+        $category = $request->get('category', 'General');
+        $source = $request->get('source', 'manual');
+        $code = $this->generateAssetCode($category, $source);
+        return response()->json(['next_code' => $code]);
+    }
+
+    // Helper to generate asset code by category and source
+    public function generateAssetCode(string $category = 'General', string $source = 'manual'): string
+    {
+        $prefix = 'AST';
+        $categoryPart = strtoupper(preg_replace('/[^A-Z0-9]/', '', substr($category, 0, 3)) ?: 'GEN');
+        $sourcePart = strtoupper(substr($source, 0, 1));
+
+        $latest = \DB::table('assets')
+            ->where('asset_code', 'like', $prefix . '-' . $categoryPart . $sourcePart . '-%')
+            ->orderBy('id', 'desc')
+            ->value('asset_code');
+
+        $nextNumber = 1;
+        if ($latest && preg_match('/-(\d{5})$/', $latest, $m)) {
+            $nextNumber = intval($m[1]) + 1;
+        }
+
+        return sprintf('%s-%s%s-%05d', $prefix, $categoryPart, $sourcePart, $nextNumber);
+    }
+
     /**
      * Show the form for creating a new resource.
      */

@@ -165,20 +165,27 @@ class RequestItemController extends Controller
     public function approve(Request $request, $id)
     {
         $req = RequestItem::findOrFail($id);
-        // Move request into procurement process upon approval
+        // Mark request as approved (DB enum: pending|approved|rejected|purchased)
         $req->update([
-            'status' => 'procurement',
+            'status' => 'approved',
             'ga_note' => $request->ga_note ?? null,
         ]);
 
-        // Create asset entry when approved - align with assets table schema
+        // Create a procurement placeholder asset so procurement can process purchase
+        $assetController = new \App\Http\Controllers\AssetController();
+        if (method_exists($assetController, 'generateAssetCode')) {
+            $generatedCode = $assetController->generateAssetCode($req->category ?? 'Other', 'request');
+        } else {
+            $generatedCode = 'AST-' . str_pad($id, 6, '0', STR_PAD_LEFT);
+        }
+
         \App\Models\Asset::create([
+            'name' => $req->item_name ?? ('Asset from Request #' . $req->id),
             'request_items_id' => $req->id,
-            'asset_code' => 'AST-' . str_pad($id, 6, '0', STR_PAD_LEFT),
-            // Category follows the request's category automatically
+            'asset_code' => $generatedCode ?: ('AST-' . str_pad($id, 6, '0', STR_PAD_LEFT)),
             'category' => $req->category ?? 'General',
-            // Asset enters procurement process first
             'status' => 'procurement',
+            'method' => 'purchasing',
             'notes' => null,
         ]);
 
@@ -195,6 +202,33 @@ class RequestItemController extends Controller
         ]);
 
         return response()->json(['message' => 'Request rejected', 'request' => $req]);
+    }
+
+    // Admin: update any request (content fields only)
+    public function updateAdmin(Request $request, $id)
+    {
+        $req = RequestItem::findOrFail($id);
+
+        $data = $request->validate([
+            'item_name' => 'sometimes|required|string|max:200',
+            'quantity' => 'sometimes|required|integer|min:1',
+            'estimated_cost' => 'nullable|numeric|min:0',
+            'category' => 'nullable|string|max:100',
+            'reason' => 'nullable|string',
+            'ga_note' => 'nullable|string',
+        ]);
+
+        $req->update($data);
+        return response()->json(['message' => 'Request updated', 'request' => $req]);
+    }
+
+    // Admin: delete request (only when safe)
+    public function destroyAdmin($id)
+    {
+        $req = RequestItem::with('assets')->findOrFail($id);
+        // Force allow delete for any status; assets will be removed via FK cascade
+        $req->delete();
+        return response()->json(['message' => 'Request deleted']);
     }
 
     // User: delete own request (only when pending)

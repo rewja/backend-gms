@@ -16,27 +16,33 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        User::create([
-            'name' => 'General Admin',
-            'email' => 'ga@example.com',
-            'password' => Hash::make('password123'), // ganti sesuai kebutuhan
-            'role' => 'admin',
-        ]);
+        User::updateOrCreate(
+            ['email' => 'ga@example.com'],
+            [
+                'name' => 'General Admin',
+                'password' => Hash::make('password123'), // ganti sesuai kebutuhan
+                'role' => 'admin',
+            ]
+        );
 
         // Procurement
-        User::create([
-            'name' => 'Procurement Officer',
-            'email' => 'procurement@example.com',
-            'password' => Hash::make('password123'), // ganti sesuai kebutuhan
-            'role' => 'procurement',
-        ]);
+        User::updateOrCreate(
+            ['email' => 'procurement@example.com'],
+            [
+                'name' => 'Procurement Officer',
+                'password' => Hash::make('password123'), // ganti sesuai kebutuhan
+                'role' => 'procurement',
+            ]
+        );
 
-        User::create([
-            'name' => 'Test User',
-            'email' => 'testuser@example.com',
-            'password' => Hash::make('password123'), // ganti sesuai kebutuhan
-            'role' => 'user',
-        ]);
+        User::updateOrCreate(
+            ['email' => 'testuser@example.com'],
+            [
+                'name' => 'Test User',
+                'password' => Hash::make('password123'), // ganti sesuai kebutuhan
+                'role' => 'user',
+            ]
+        );
 
         // Seed meetings
         $this->call(MeetingSeeder::class);

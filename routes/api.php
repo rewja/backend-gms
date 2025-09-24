@@ -38,15 +38,20 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('users')->group(functi
 Route::middleware('auth:sanctum')->get('/me', [UserController::class, 'me']);
 
 // ---------------- TODOS ----------------
-// User: manage own todos (simplified - no creation, only status management)
+// User: manage own todos
 Route::middleware(['auth:sanctum', 'role:user'])->prefix('todos')->group(function () {
     Route::get('/', [TodoController::class, 'index']);                    // list own todos
     Route::get('/stats', [TodoController::class, 'statsUser']);           // personal todo stats
-    Route::patch('/{id}/start', [TodoController::class, 'start']);        // start todo (not_started/hold -> in_progress)
-    Route::patch('/{id}/hold', [TodoController::class, 'hold']);          // hold todo (in_progress -> hold)
-    Route::patch('/{id}/complete', [TodoController::class, 'complete']);  // complete todo (in_progress -> completed)
-    Route::post('/{id}/submit', [TodoController::class, 'submitForChecking']); // submit for checking (with evidence)
+    Route::post('/', [TodoController::class, 'store']);                   // create todo
+    Route::put('/{id}', [TodoController::class, 'update']);               // update todo (full)
+    Route::patch('/{id}', [TodoController::class, 'update']);             // update todo (partial)
+    Route::post('/{id}', [TodoController::class, 'update']);              // update todo (form-data POST support)
+    Route::patch('/{id}/start', [TodoController::class, 'start']);        // start todo (not_started -> in_progress)
+
+    // FIXED: Use POST for file uploads - more reliable than PATCH/PUT
+    Route::post('/{id}/submit', [TodoController::class, 'submitForChecking']); // submit for checking
     Route::post('/{id}/improve', [TodoController::class, 'submitImprovement']); // submit improvements during evaluating
+
     Route::delete('/{id}', [TodoController::class, 'destroy']);           // delete todo
 });
 
@@ -92,6 +97,15 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('requests')->group(fun
     Route::get('/stats/global', [RequestItemController::class, 'statsGlobal']);
     Route::patch('/{id}/approve', [RequestItemController::class, 'approve']);
     Route::patch('/{id}/reject', [RequestItemController::class, 'reject']);
+    // Admin edit/delete
+    Route::patch('/{id}', [RequestItemController::class, 'updateAdmin']);
+    Route::delete('/{id}', [RequestItemController::class, 'destroyAdmin']);
+});
+
+// Procurement: read and edit requests (no approve/reject)
+Route::middleware(['auth:sanctum', 'role:procurement'])->prefix('requests')->group(function () {
+    Route::get('/', [RequestItemController::class, 'index']);
+    Route::patch('/{id}', [RequestItemController::class, 'updateAdmin']);
 });
 
 // ---------------- PROCUREMENT ----------------
@@ -108,6 +122,7 @@ Route::middleware(['auth:sanctum', 'role:procurement'])->prefix('procurements')-
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('assets')->group(function () {
     Route::get('/', [AssetController::class, 'index']);
     Route::get('/stats', [AssetController::class, 'stats']);
+    Route::get('/next-code', [AssetController::class, 'nextCode']);
     Route::post('/', [AssetController::class, 'store']);
     Route::get('/{id}', [AssetController::class, 'show']);
     Route::put('/{id}', [AssetController::class, 'update']);
@@ -116,10 +131,16 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('assets')->group(funct
     Route::delete('/{id}', [AssetController::class, 'destroy']);
 });
 
-// Procurement: read-only access to assets
+// Procurement: CRUD-minus-create (can read, update, delete) on assets
 Route::middleware(['auth:sanctum', 'role:procurement'])->prefix('assets')->group(function () {
     Route::get('/', [AssetController::class, 'index']);
     Route::get('/stats', [AssetController::class, 'stats']);
+    Route::get('/{id}', [AssetController::class, 'show']);
+    Route::put('/{id}', [AssetController::class, 'update']);
+    Route::patch('/{id}', [AssetController::class, 'update']);
+    // Allow procurement to update status-only (avoid full validation requirements)
+    Route::patch('/{id}/status', [AssetController::class, 'updateStatus']);
+    Route::delete('/{id}', [AssetController::class, 'destroy']);
 });
 
 // User: manage own assets
