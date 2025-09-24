@@ -47,6 +47,8 @@ Route::middleware(['auth:sanctum', 'role:user'])->prefix('todos')->group(functio
     Route::patch('/{id}', [TodoController::class, 'update']);             // update todo (partial)
     Route::post('/{id}', [TodoController::class, 'update']);              // update todo (form-data POST support)
     Route::patch('/{id}/start', [TodoController::class, 'start']);        // start todo (not_started -> in_progress)
+    Route::patch('/{id}/hold', [TodoController::class, 'hold']);          // hold todo (in_progress -> hold)
+    Route::patch('/{id}/complete', [TodoController::class, 'complete']);  // complete todo (in_progress -> completed)
 
     // FIXED: Use POST for file uploads - more reliable than PATCH/PUT
     Route::post('/{id}/submit', [TodoController::class, 'submitForChecking']); // submit for checking
@@ -55,7 +57,7 @@ Route::middleware(['auth:sanctum', 'role:user'])->prefix('todos')->group(functio
     Route::delete('/{id}', [TodoController::class, 'destroy']);           // delete todo
 });
 
-// Admin: create todos for users
+// Admin: create todos for users (kept for compatibility)
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('todos')->group(function () {
     Route::post('/', [TodoController::class, 'store']);                   // create todo (admin only)
 });

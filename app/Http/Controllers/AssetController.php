@@ -5,9 +5,42 @@ namespace App\Http\Controllers;
 use App\Models\Asset;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AssetController extends Controller
 {
+    private function resolveCategoryPrefix(string $category): string
+    {
+        $normalized = strtolower(trim($category));
+        $map = [
+            'ob equipment' => 'OBE',
+            'security equipment' => 'SE',
+            'driver equipment' => 'DE',
+            'other' => 'OE',
+            'general' => 'OE',
+            'it equipment' => 'OE',
+            'office furniture' => 'OE',
+            'office supplies' => 'OE',
+            'maintenance' => 'OE',
+        ];
+        $prefixCat = $map[$normalized] ?? null;
+        if ($prefixCat === null) {
+            if (str_contains($normalized, 'driver')) {
+                return 'DE';
+            }
+            if (str_contains($normalized, 'security')) {
+                return 'SE';
+            }
+            if (str_contains($normalized, 'ob ')
+                || str_contains($normalized, 'ob equipment')
+                || str_contains($normalized, 'operational building')
+            ) {
+                return 'OBE';
+            }
+            return 'OE';
+        }
+        return $prefixCat;
+    }
     /**
      * Display a listing of the resource.
      */
@@ -20,20 +53,20 @@ class AssetController extends Controller
     // Admin: asset statistics
     public function stats()
     {
-        $byCategory = \DB::table('assets')
+        $byCategory = DB::table('assets')
             ->selectRaw('category, COUNT(*) as total')
             ->groupBy('category')
             ->get();
 
-        $byStatus = \DB::table('assets')
+        $byStatus = DB::table('assets')
             ->selectRaw('status, COUNT(*) as total')
             ->groupBy('status')
             ->get();
 
-        $driver = \DB::connection()->getDriverName();
+        $driver = DB::connection()->getDriverName();
         $monthExpr = $driver === 'mysql' ? 'DATE_FORMAT(created_at, "%Y-%m")' : 'strftime("%Y-%m", created_at)';
 
-        $timeline = \DB::table('assets')
+        $timeline = DB::table('assets')
             ->selectRaw("{$monthExpr} as ym, COUNT(*) as total")
             ->groupByRaw($monthExpr)
             ->orderByRaw('ym DESC')
@@ -50,30 +83,63 @@ class AssetController extends Controller
     // Generate next asset code preview for admin UI
     public function nextCode(Request $request)
     {
-        $category = $request->get('category', 'General');
-        $source = $request->get('source', 'manual');
-        $code = $this->generateAssetCode($category, $source);
-        return response()->json(['next_code' => $code]);
+        $validated = $request->validate([
+            'category' => 'nullable|string',
+            'context' => 'nullable|in:request,addition',
+            // backward-compat: accept legacy 'source'
+            'source' => 'nullable|string',
+        ]);
+        $category = trim((string)($validated['category'] ?? $request->get('category', 'Other')));
+        if ($category === '') {
+            $category = 'Other';
+        }
+        $context = $validated['context'] ?? ($request->get('source') ? 'request' : 'addition');
+        $prefixCat = $this->resolveCategoryPrefix($category);
+        $code = $this->generateAssetCode($category, $context);
+        $count = Asset::where('asset_code', 'like', $prefixCat . '-%')->count();
+        return response()->json([
+            // new keys
+            'asset_code' => $code,
+            'count' => $count,
+            'prefix' => $prefixCat,
+            // compatibility for existing frontend
+            'next_code' => $code,
+        ]);
     }
 
-    // Helper to generate asset code by category and source
-    public function generateAssetCode(string $category = 'General', string $source = 'manual'): string
+    // Helper to generate asset code by category and context (date + increasing suffix)
+    public function generateAssetCode(string $category = 'General', string $context = 'request'): string
     {
-        $prefix = 'AST';
-        $categoryPart = strtoupper(preg_replace('/[^A-Z0-9]/', '', substr($category, 0, 3)) ?: 'GEN');
-        $sourcePart = strtoupper(substr($source, 0, 1));
+        $prefixCat = $this->resolveCategoryPrefix($category);
+        $date = now()->timezone(config('app.timezone', 'Asia/Jakarta'))->format('mdY');
+        $prefixForToday = $prefixCat . '-' . $date . '-';
 
-        $latest = \DB::table('assets')
-            ->where('asset_code', 'like', $prefix . '-' . $categoryPart . $sourcePart . '-%')
-            ->orderBy('id', 'desc')
-            ->value('asset_code');
+        return DB::transaction(function () use ($prefixCat, $prefixForToday) {
+            $catPrefix = $prefixCat . '-';
+            $latestCodes = Asset::where('asset_code', 'like', $catPrefix . '%')
+                ->select('asset_code')
+                ->lockForUpdate()
+                ->get()
+                ->pluck('asset_code');
 
-        $nextNumber = 1;
-        if ($latest && preg_match('/-(\d{5})$/', $latest, $m)) {
-            $nextNumber = intval($m[1]) + 1;
-        }
+            $maxSuffix = 0;
+            foreach ($latestCodes as $code) {
+                $parts = explode('-', $code);
+                $last = end($parts);
+                $num = (int) $last;
+                if ($num > $maxSuffix) {
+                    $maxSuffix = $num;
+                }
+            }
+            $next = $maxSuffix + 1;
 
-        return sprintf('%s-%s%s-%05d', $prefix, $categoryPart, $sourcePart, $nextNumber);
+            $code = $prefixForToday . str_pad((string)$next, 6, '0', STR_PAD_LEFT);
+            while (Asset::where('asset_code', $code)->exists()) {
+                $next++;
+                $code = $prefixForToday . str_pad((string)$next, 6, '0', STR_PAD_LEFT);
+            }
+            return $code;
+        });
     }
 
     /**
@@ -98,15 +164,19 @@ class AssetController extends Controller
             'supplier' => 'nullable|string|max:255',
             'purchase_cost' => 'nullable|numeric|min:0',
             'purchase_date' => 'nullable|date',
+            'quantity' => 'nullable|integer|min:1',
             'notes' => 'nullable|string',
             'request_items_id' => 'nullable|exists:request_items,id',
         ]);
 
-        // Generate asset code
-        $data['asset_code'] = 'AST-' . Str::upper(Str::random(8));
+        // Generate asset code based on category and date sequence
+        $category = $data['category'] ?? 'Other';
+        $context = $request->input('request_items_id') ? 'request' : 'addition';
+        $data['asset_code'] = $this->generateAssetCode($category, $context);
 
         // Set method based on whether it comes from request or direct input
-        $data['method'] = $data['request_items_id'] ? 'purchasing' : 'data_input';
+        $requestItemsId = $request->input('request_items_id');
+        $data['method'] = $requestItemsId ? 'purchasing' : 'data_input';
 
         // Set default status if not provided
         if (!isset($data['status'])) {
@@ -146,10 +216,11 @@ class AssetController extends Controller
             'category' => 'required|string|max:100',
             'color' => 'nullable|string|max:100',
             'location' => 'nullable|string|max:255',
-            'status' => 'required|in:not_received,received,needs_repair,needs_replacement,repairing,replacing',
+            'status' => 'required|in:not_received,received,needs_repair,needs_replacement,repairing,replacing,shipping,procurement',
             'supplier' => 'nullable|string|max:255',
             'purchase_cost' => 'nullable|numeric|min:0',
             'purchase_date' => 'nullable|date',
+            'quantity' => 'nullable|integer|min:1',
             'notes' => 'nullable|string',
             'received_date' => 'nullable|date',
         ]);
@@ -167,7 +238,7 @@ class AssetController extends Controller
         $asset = Asset::findOrFail($id);
 
         $data = $request->validate([
-            'status' => 'required|in:procurement,not_received,received,needs_repair,needs_replacement,repairing,replacing',
+            'status' => 'required|in:procurement,not_received,received,needs_repair,needs_replacement,repairing,replacing,shipping',
             'received_date' => 'nullable|date',
             'notes' => 'nullable|string',
         ]);
@@ -215,7 +286,7 @@ class AssetController extends Controller
         }
 
         // Validation: end user can set received/not_received/needs_*; procurement can also set repairing/replacing
-        $allowedStatuses = ['received','not_received','needs_repair','needs_replacement'];
+        $allowedStatuses = ['received','not_received','needs_repair','needs_replacement','shipping','procurement'];
         if (in_array($currentUser->role ?? '', ['procurement', 'admin'])) {
             $allowedStatuses = array_merge($allowedStatuses, ['repairing','replacing']);
         }
