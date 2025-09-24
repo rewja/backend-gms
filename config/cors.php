@@ -20,21 +20,11 @@ return [
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
-        // 'http://localhost:8004',
-        'http://172.15.3.141:8004',
-        'http://172.15.3.141:8084',
-        // 'http:://localhost:5001',
-        // 'http://172.15.3.141:5001',
-        // 'http://localhost:5173',
-        // 'http://localhost:8000',
-        // 'http://172.15.3.141:8000',
-        'http://172.15.3.141:5173'
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
     ],
 
-    'allowed_origins_patterns' => [
-        'http://172.15.3.*:*',
-        'http://localhost:*'
-    ],
+    'allowed_origins_patterns' => [],
 
     'allowed_headers' => ['*'],
 
