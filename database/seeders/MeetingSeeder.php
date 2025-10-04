@@ -11,10 +11,10 @@ class MeetingSeeder extends Seeder
     public function run()
     {
         // Get test user
-        $user = User::where('email', 'testuser@example.com')->first();
+        $user = User::where('email', 'user@example.com')->first();
 
         if (!$user) {
-            echo "Test user not found. Please run UserSeeder first.\n";
+            echo "User not found. Please run UserSeeder first.\n";
             return;
         }
 

@@ -13,7 +13,9 @@ return new class extends Migration
     public function up(): void
     {
         // Add new status values to existing enum
-        DB::statement("ALTER TABLE todos MODIFY COLUMN status ENUM('not_started', 'in_progress', 'checking', 'evaluating', 'reworked', 'completed', 'hold') DEFAULT 'not_started'");
+        if (Schema::getConnection()->getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE todos MODIFY COLUMN status ENUM('not_started', 'in_progress', 'checking', 'evaluating', 'reworked', 'completed', 'hold') DEFAULT 'not_started'");
+        }
         
         // Add todo type field
         Schema::table('todos', function (Blueprint $table) {
@@ -28,7 +30,9 @@ return new class extends Migration
     public function down(): void
     {
         // Revert status enum
-        DB::statement("ALTER TABLE todos MODIFY COLUMN status ENUM('not_started', 'in_progress', 'checking', 'evaluating', 'reworked', 'completed') DEFAULT 'not_started'");
+        if (Schema::getConnection()->getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE todos MODIFY COLUMN status ENUM('not_started', 'in_progress', 'checking', 'evaluating', 'reworked', 'completed') DEFAULT 'not_started'");
+        }
         
         // Drop new columns
         Schema::table('todos', function (Blueprint $table) {

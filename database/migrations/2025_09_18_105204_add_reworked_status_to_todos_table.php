@@ -12,8 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('todos', function (Blueprint $table) {
-            // Modify the status column to include 'reworked' as a valid value
-            $table->enum('status', ['not_started', 'in_progress', 'checking', 'evaluating', 'reworked', 'completed'])->change();
+            // Modify the status column to include 'evaluating' as a valid value
+            $table->enum('status', ['not_started', 'in_progress', 'checking', 'evaluating', 'completed', 'hold'])->change();
         });
     }
 
@@ -24,7 +24,7 @@ return new class extends Migration
     {
         Schema::table('todos', function (Blueprint $table) {
             // Revert back to original status values
-            $table->enum('status', ['not_started', 'in_progress', 'checking', 'evaluating', 'completed'])->change();
+            $table->enum('status', ['not_started', 'in_progress', 'checking', 'evaluating', 'completed', 'hold'])->change();
         });
     }
 };

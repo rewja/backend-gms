@@ -17,7 +17,9 @@ return new class extends Migration
         }
 
         // Also ensure the column is properly set in the database
-        DB::statement("ALTER TABLE todos MODIFY COLUMN evidence_path VARCHAR(255) NULL");
+        if (Schema::getConnection()->getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE todos MODIFY COLUMN evidence_path VARCHAR(255) NULL");
+        }
     }
 
     public function down(): void

@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -11,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         // Extend status enum to include procurement and not_received
-        DB::statement("ALTER TABLE request_items MODIFY status ENUM('pending','approved','rejected','procurement','not_received','purchased') NOT NULL DEFAULT 'pending'");
+        if (Schema::getConnection()->getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE request_items MODIFY status ENUM('pending','approved','rejected','procurement','not_received','purchased') NOT NULL DEFAULT 'pending'");
+        }
     }
 
     /**
@@ -20,7 +23,9 @@ return new class extends Migration
     public function down(): void
     {
         // Revert to original enum definition
-        DB::statement("ALTER TABLE request_items MODIFY status ENUM('pending','approved','rejected','purchased') NOT NULL DEFAULT 'pending'");
+        if (Schema::getConnection()->getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE request_items MODIFY status ENUM('pending','approved','rejected','purchased') NOT NULL DEFAULT 'pending'");
+        }
     }
 };
 

@@ -277,7 +277,7 @@ class AssetController extends Controller
     {
         $currentUser = $request->user();
         // Allow procurement/admin to update any asset; normal users only their own
-        if (in_array($currentUser->role ?? '', ['procurement', 'admin'])) {
+        if (in_array($currentUser->role ?? '', ['admin_ga', 'admin_ga_manager', 'super_admin'])) {
             $asset = Asset::findOrFail($id);
         } else {
             $asset = Asset::whereHas('request', function ($q) use ($request) {
@@ -287,7 +287,7 @@ class AssetController extends Controller
 
         // Validation: end user can set received/not_received/needs_*; procurement can also set repairing/replacing
         $allowedStatuses = ['received','not_received','needs_repair','needs_replacement','shipping','procurement'];
-        if (in_array($currentUser->role ?? '', ['procurement', 'admin'])) {
+        if (in_array($currentUser->role ?? '', ['admin_ga', 'admin_ga_manager', 'super_admin'])) {
             $allowedStatuses = array_merge($allowedStatuses, ['repairing','replacing']);
         }
 
@@ -304,7 +304,7 @@ class AssetController extends Controller
         ];
 
         // If marking as received by end user, receipt proof is mandatory
-        if (($data['status'] ?? null) === 'received' && !$request->hasFile('receipt_proof') && !in_array($currentUser->role ?? '', ['procurement','admin'])) {
+        if (($data['status'] ?? null) === 'received' && !$request->hasFile('receipt_proof') && !in_array($currentUser->role ?? '', ['admin_ga','admin_ga_manager','super_admin'])) {
             return response()->json(['message' => 'Receipt proof is required to mark as received'], 422);
         }
 
@@ -347,5 +347,205 @@ class AssetController extends Controller
         }
 
         return response()->json(['message' => 'Asset status updated', 'asset' => $asset->fresh(['request'])]);
+    }
+
+    public function requestMaintenance(Request $request, $id)
+    {
+        $user = $request->user();
+        $asset = Asset::with('request')->findOrFail($id);
+
+        if (!in_array($user->role ?? '', ['admin_ga', 'ga', 'user'])) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if (($user->role ?? '') === 'user') {
+            if (!$asset->request || $asset->request->user_id !== $user->id) {
+                return response()->json(['message' => 'Asset not found'], 404);
+            }
+        }
+
+        if (in_array($asset->maintenance_status, ['pending', 'in_progress']) ) {
+            return response()->json(['message' => 'Maintenance already requested or in progress'], 422);
+        }
+
+        $data = $request->validate([
+            'type' => 'required|in:repair,replacement',
+            'reason' => 'required|string|min:5',
+        ]);
+
+        if ($asset->request) {
+            if ($asset->request->status !== 'completed') {
+                return response()->json(['message' => 'Maintenance can only be requested after completion'], 422);
+            }
+        }
+
+        $asset->maintenance_type = $data['type'];
+        $asset->maintenance_reason = $data['reason'];
+        // Use maintenance_pending for maintenance requests to distinguish from regular requests
+        $asset->maintenance_status = 'maintenance_pending';
+        $asset->maintenance_requested_by = $user->id;
+        $asset->maintenance_requested_at = now();
+        $asset->maintenance_completed_by = null;
+        $asset->maintenance_completed_at = null;
+        $asset->maintenance_completion_notes = null;
+        $asset->save();
+
+        if ($asset->request) {
+            $asset->request->update([
+                'maintenance_type' => $data['type'],
+                'maintenance_reason' => $data['reason'],
+                'maintenance_status' => 'maintenance_pending',
+                'maintenance_requested_by' => $user->id,
+                'maintenance_requested_at' => now(),
+                'maintenance_completed_by' => null,
+                'maintenance_completed_at' => null,
+                'maintenance_completion_notes' => null,
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Maintenance request submitted',
+            'asset' => $asset->fresh(['request']),
+        ]);
+    }
+
+    public function completeMaintenance(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!in_array($user->role ?? '', ['procurement', 'admin'])) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $asset = Asset::with('request')->findOrFail($id);
+
+        if ($asset->maintenance_status !== 'in_progress') {
+            return response()->json(['message' => 'No maintenance in progress'], 422);
+        }
+
+        $data = $request->validate([
+            'notes' => 'nullable|string',
+        ]);
+
+        $asset->maintenance_status = 'completed';
+        $asset->maintenance_completed_by = $user->id;
+        $asset->maintenance_completed_at = now();
+        $asset->maintenance_completion_notes = $data['notes'] ?? null;
+        $asset->save();
+
+        if ($asset->request) {
+            $asset->request->update([
+                'maintenance_status' => 'completed',
+                'maintenance_completed_by' => $user->id,
+                'maintenance_completed_at' => now(),
+                'maintenance_completion_notes' => $data['notes'] ?? null,
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Maintenance marked as completed',
+            'asset' => $asset->fresh(['request']),
+        ]);
+    }
+
+    public function startMaintenance(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!in_array($user->role ?? '', ['procurement', 'admin'])) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $asset = Asset::with('request')->findOrFail($id);
+
+        if (!in_array($asset->maintenance_status, ['approved', 'procurement'])) {
+            return response()->json(['message' => 'No approved maintenance to start'], 422);
+        }
+
+        // Update maintenance status and also update the main status
+        $asset->maintenance_status = 'in_progress';
+        $asset->maintenance_started_by = $user->id;
+        $asset->maintenance_started_at = now();
+
+        // Update main status based on maintenance type
+        if ($asset->maintenance_type === 'repair') {
+            $asset->status = 'repairing';
+        } elseif ($asset->maintenance_type === 'replacement') {
+            $asset->status = 'replacing';
+        }
+
+        $asset->save();
+
+        if ($asset->request) {
+            $asset->request->update([
+                'maintenance_status' => 'in_progress',
+                'maintenance_started_by' => $user->id,
+                'maintenance_started_at' => now(),
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Maintenance started',
+            'asset' => $asset->fresh(['request']),
+        ]);
+    }
+
+    public function approveMaintenance(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!in_array($user->role ?? '', ['admin_ga', 'ga'])) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $asset = Asset::with('request')->findOrFail($id);
+
+        if ($asset->maintenance_status !== 'maintenance_pending') {
+            return response()->json(['message' => 'No pending maintenance to approve'], 422);
+        }
+
+        $asset->maintenance_status = 'approved';
+        $asset->maintenance_approved_by = $user->id;
+        $asset->maintenance_approved_at = now();
+        $asset->save();
+
+        if ($asset->request) {
+            $asset->request->update([
+                'maintenance_status' => 'approved',
+                'maintenance_approved_by' => $user->id,
+                'maintenance_approved_at' => now(),
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Maintenance request approved',
+            'asset' => $asset->fresh(['request']),
+        ]);
+    }
+
+    public function rejectMaintenance(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!in_array($user->role ?? '', ['admin_ga', 'ga'])) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $asset = Asset::with('request')->findOrFail($id);
+
+        if ($asset->maintenance_status !== 'maintenance_pending') {
+            return response()->json(['message' => 'No pending maintenance to reject'], 422);
+        }
+
+        $asset->maintenance_status = 'rejected';
+        $asset->save();
+
+        if ($asset->request) {
+            $asset->request->update([
+                'maintenance_status' => 'rejected',
+                'ga_note' => $request->ga_note,
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Maintenance request rejected',
+            'asset' => $asset->fresh(['request']),
+        ]);
     }
 }

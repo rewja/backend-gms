@@ -63,12 +63,28 @@ class RequestItemController extends Controller
     }
 
     // GA: list all requests
-    public function index()
+    public function index(Request $request)
     {
+        // If count_only parameter is present, return only count
+        if ($request->has('count_only') && $request->count_only) {
+            $count = RequestItem::count();
+            return response()->json($count);
+        }
+
         $items = RequestItem::with(['user', 'assets'])->latest()->get();
         foreach ($items as $item) {
-            if ($item->assets && $item->assets->contains(fn($a) => $a->status === 'received')) {
-                $item->status = 'received';
+            if ($item->assets && $item->assets->count() > 0) {
+                $firstAsset = $item->assets->first();
+                $item->asset_code = $firstAsset->asset_code;
+                $item->maintenance_status = $firstAsset->maintenance_status;
+
+                // Update request status based on asset status
+                if ($firstAsset->status === 'received') {
+                    $item->status = 'received';
+                } elseif ($firstAsset->status === 'replacing' || $firstAsset->status === 'repairing') {
+                    // If asset is in maintenance, consider request as received
+                    $item->status = 'received';
+                }
             }
         }
         return response()->json($items);
@@ -240,5 +256,157 @@ class RequestItemController extends Controller
         }
         $req->delete();
         return response()->json(['message' => 'Request deleted']);
+    }
+
+    public function requestMaintenance(Request $request, $id)
+    {
+        $currentUser = $request->user();
+        $item = RequestItem::with('assets')->findOrFail($id);
+
+        if (($currentUser->role ?? '') === 'user' && $item->user_id !== $currentUser->id) {
+            return response()->json(['message' => 'Request not found'], 404);
+        }
+
+        if (!in_array($currentUser->role ?? '', ['user', 'ga', 'admin_ga'])) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if ($item->assets->isEmpty()) {
+            return response()->json(['message' => 'No assets available for maintenance'], 422);
+        }
+
+        $hasReceivedAssets = $item->assets->contains(fn ($asset) => $asset->status === 'received');
+        if (!($hasReceivedAssets || in_array($item->status, ['completed', 'received']))) {
+            return response()->json(['message' => 'Maintenance is only available after the items have been received'], 422);
+        }
+
+        if (in_array($item->maintenance_status, ['maintenance_pending', 'in_progress'])) {
+            return response()->json(['message' => 'Maintenance already requested or in progress'], 422);
+        }
+
+        $data = $request->validate([
+            'type' => 'required|in:repair,replacement',
+            'reason' => 'required|string|min:5',
+        ]);
+
+        foreach ($item->assets as $asset) {
+            if (in_array($asset->maintenance_status, ['maintenance_pending', 'in_progress'])) {
+                return response()->json(['message' => 'Maintenance already requested for linked asset'], 422);
+            }
+        }
+
+    \DB::transaction(function () use ($item, $data, $currentUser) {
+            $item->update([
+                'maintenance_type' => $data['type'],
+                'maintenance_reason' => $data['reason'],
+                'maintenance_status' => 'maintenance_pending',
+                'maintenance_requested_by' => $currentUser->id,
+                'maintenance_requested_at' => now(),
+                'maintenance_completed_by' => null,
+                'maintenance_completed_at' => null,
+                'maintenance_completion_notes' => null,
+            ]);
+
+            foreach ($item->assets as $asset) {
+                $asset->maintenance_type = $data['type'];
+                $asset->maintenance_reason = $data['reason'];
+                $asset->maintenance_status = 'maintenance_pending';
+                $asset->maintenance_requested_by = $currentUser->id;
+                $asset->maintenance_requested_at = now();
+                $asset->maintenance_completed_by = null;
+                $asset->maintenance_completed_at = null;
+                $asset->maintenance_completion_notes = null;
+                $asset->status = $data['type'] === 'replacement' ? 'needs_replacement' : 'needs_repair';
+                $asset->save();
+            }
+            if ($data['type'] === 'replacement') {
+                $item->status = 'procurement';
+            } elseif ($data['type'] === 'repair') {
+                $item->status = 'procurement';
+            }
+            $item->save();
+        });
+
+        return response()->json([
+            'message' => 'Maintenance request submitted',
+            'request' => $item->fresh(['assets']),
+        ]);
+    }
+
+    public function completeMaintenance(Request $request, $id)
+    {
+        $currentUser = $request->user();
+        if (!in_array($currentUser->role ?? '', ['admin_ga', 'admin_ga_manager', 'super_admin'])) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $item = RequestItem::with('assets')->findOrFail($id);
+
+        if ($item->maintenance_status !== 'in_progress') {
+            return response()->json(['message' => 'No maintenance in progress'], 422);
+        }
+
+        $data = $request->validate([
+            'notes' => 'nullable|string',
+        ]);
+
+    \DB::transaction(function () use ($item, $data, $currentUser) {
+            $item->update([
+                'maintenance_status' => 'completed',
+                'maintenance_completed_by' => $currentUser->id,
+                'maintenance_completed_at' => now(),
+                'maintenance_completion_notes' => $data['notes'] ?? null,
+            ]);
+
+            foreach ($item->assets as $asset) {
+                $asset->maintenance_status = 'completed';
+                $asset->maintenance_completed_by = $currentUser->id;
+                $asset->maintenance_completed_at = now();
+                $asset->maintenance_completion_notes = $data['notes'] ?? null;
+                $asset->status = 'received';
+                $asset->save();
+            }
+            $item->status = 'received';
+            $item->save();
+        });
+
+        return response()->json([
+            'message' => 'Maintenance marked as completed',
+            'request' => $item->fresh(['assets']),
+        ]);
+    }
+
+    public function startMaintenance(Request $request, $id)
+    {
+        $currentUser = $request->user();
+        if (!in_array($currentUser->role ?? '', ['admin_ga', 'admin_ga_manager', 'super_admin'])) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $item = RequestItem::with('assets')->findOrFail($id);
+
+        if ($item->maintenance_status !== 'maintenance_pending') {
+            return response()->json(['message' => 'No pending maintenance to start'], 422);
+        }
+
+        \DB::transaction(function () use ($item, $currentUser) {
+            $item->update([
+                'maintenance_status' => 'in_progress',
+                'maintenance_started_by' => $currentUser->id,
+                'maintenance_started_at' => now(),
+            ]);
+
+            foreach ($item->assets as $asset) {
+                $asset->maintenance_status = 'in_progress';
+                $asset->maintenance_started_by = $currentUser->id;
+                $asset->maintenance_started_at = now();
+                $asset->save();
+            }
+        });
+
+        return response()->json([
+            'message' => 'Maintenance started',
+            'request' => $item->fresh(['assets']),
+        ]);
     }
 }

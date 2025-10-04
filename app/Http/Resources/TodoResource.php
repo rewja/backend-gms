@@ -87,6 +87,8 @@ class TodoResource extends JsonResource
             'scheduled_date' => $this->scheduled_date,
             'target_start_at' => $formatJakarta($this->target_start_at),
             'target_end_at' => $formatJakarta($this->target_end_at),
+            'target_duration_value' => $this->target_duration_value,
+            'target_duration_unit' => $this->target_duration_unit,
             'started_at' => $formatJakarta($this->started_at),
             'submitted_at' => $formatJakarta($this->submitted_at),
             // Raw ISO timestamps for form editing

@@ -14,10 +14,14 @@ return new class extends Migration
 
         // Some older schemas had NOT NULL check_in/check_out without defaults
         if (Schema::hasColumn('visitors', 'check_in')) {
-            DB::statement('ALTER TABLE visitors MODIFY check_in TIMESTAMP NULL DEFAULT NULL');
+            if (Schema::getConnection()->getDriverName() === 'mysql') {
+                DB::statement('ALTER TABLE visitors MODIFY check_in TIMESTAMP NULL DEFAULT NULL');
+            }
         }
         if (Schema::hasColumn('visitors', 'check_out')) {
-            DB::statement('ALTER TABLE visitors MODIFY check_out TIMESTAMP NULL DEFAULT NULL');
+            if (Schema::getConnection()->getDriverName() === 'mysql') {
+                DB::statement('ALTER TABLE visitors MODIFY check_out TIMESTAMP NULL DEFAULT NULL');
+            }
         }
     }
 

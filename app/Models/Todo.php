@@ -21,6 +21,8 @@ class Todo extends Model
         'scheduled_date',
         'target_start_at',
         'target_end_at',
+        'target_duration_value',
+        'target_duration_unit',
         'started_at',
         'submitted_at',
         'total_work_time',
@@ -31,6 +33,7 @@ class Todo extends Model
         'evidence_names', // Tambahkan ini untuk multiple evidence names
         'checked_by',
         'notes',
+        'hold_note',
         'rating',
         'todo_type',      // rutin or tambahan
         'target_category', // all, ob, driver, security
@@ -147,8 +150,6 @@ class Todo extends Model
                 return "check-circle";
             case "evaluating":
                 return "eye";
-            case "reworked":
-                return "refresh-cw";
             case "completed":
                 return "check-circle";
             case "hold":
@@ -170,8 +171,6 @@ class Todo extends Model
                 return "orange";
             case "evaluating":
                 return "purple";
-            case "reworked":
-                return "orange";
             case "completed":
                 return "green";
             case "hold":

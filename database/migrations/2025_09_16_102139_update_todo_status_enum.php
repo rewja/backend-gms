@@ -10,6 +10,10 @@ return new class extends Migration
     public function up(): void
     {
         // Migrate existing data to new status
+        if (Schema::getConnection()->getDriverName() !== 'mysql') {
+            return;
+        }
+
         DB::statement("ALTER TABLE todos MODIFY COLUMN status ENUM('not_started', 'in_progress', 'checking', 'completed') DEFAULT 'not_started'");
 
         // Update existing records
@@ -21,6 +25,10 @@ return new class extends Migration
     public function down(): void
     {
         // Revert to previous enum
+        if (Schema::getConnection()->getDriverName() !== 'mysql') {
+            return;
+        }
+
         DB::statement("ALTER TABLE todos MODIFY COLUMN status ENUM('pending', 'in_progress', 'done', 'checked') DEFAULT 'pending'");
 
         // Revert existing records

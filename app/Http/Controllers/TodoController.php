@@ -37,6 +37,39 @@ class TodoController extends Controller
         return $parts ? implode(', ', $parts) : '0 seconds';
     }
 
+    // Helper method to calculate automatic rating based on duration vs target
+    private function calculateAutomaticRating($actualDuration, $targetDuration)
+    {
+        if (!$targetDuration || $targetDuration <= 0) {
+            return null; // No target set, no rating
+        }
+
+        $ratio = $actualDuration / $targetDuration;
+        
+        if ($ratio <= 0.5) {
+            // Completed in half the target time or less - excellent
+            return 95;
+        } elseif ($ratio <= 0.75) {
+            // Completed in 75% of target time - very good
+            return 85;
+        } elseif ($ratio <= 1.0) {
+            // Completed within target time - good
+            return 75;
+        } elseif ($ratio <= 1.25) {
+            // Completed in 125% of target time - acceptable
+            return 60;
+        } elseif ($ratio <= 1.5) {
+            // Completed in 150% of target time - below average
+            return 45;
+        } elseif ($ratio <= 2.0) {
+            // Completed in 200% of target time - poor
+            return 30;
+        } else {
+            // Completed in more than 200% of target time - very poor
+            return 15;
+        }
+    }
+
     private function getDayNameId(Carbon $date): string
     {
         $map = [
@@ -262,7 +295,7 @@ class TodoController extends Controller
     public function store(Request $request)
     {
         // Check if user is admin
-        if ($request->user()->role !== 'admin') {
+        if ($request->user()->role !== 'admin_ga') {
             return response()->json([
                 'message' => 'Only admin can create todos'
             ], 403);
@@ -276,6 +309,8 @@ class TodoController extends Controller
             'scheduled_date' => 'nullable|date|after_or_equal:today',
             'target_start_at' => 'nullable|date|after_or_equal:now',
             'target_end_at' => 'nullable|date|after:target_start_at',
+            'target_duration_value' => 'nullable|integer|min:1',
+            'target_duration_unit' => 'nullable|in:minutes,hours',
             'todo_type' => 'required|in:rutin,tambahan',
             'target_category' => 'required|in:all,ob,driver,security',
             'target_user_id' => 'nullable|exists:users,id', // legacy
@@ -284,7 +319,7 @@ class TodoController extends Controller
             // recurrence for rutin
             'recurrence_start_date' => 'nullable|date',
             'recurrence_interval' => 'nullable|integer|min:1',
-            'recurrence_unit' => 'nullable|in:day,week,month,year',
+            'recurrence_unit' => 'nullable|in:day,week,month',
             'recurrence_count' => 'nullable|integer|min:0',
             // best-practice additions
             'occurrences_per_interval' => 'nullable|integer|min:1',
@@ -312,7 +347,7 @@ class TodoController extends Controller
                     ->get();
             } else {
                 $query = \App\Models\User::query()
-                    ->where('role', 'user'); // exclude admin/procurement from All Categories
+                    ->where('role', 'user'); // exclude admin_ga/procurement from All Categories
                 if ($data['target_category'] !== 'all') {
                     // use category field on users
                     $query->where('category', $data['target_category']);
@@ -356,13 +391,19 @@ class TodoController extends Controller
                         }
                     } elseif ($unit === 'week') {
                         $windowEnd = $windowStart->copy()->addWeeks(4);
-                        $cursor = $windowStart->copy()->startOfWeek();
+                        $cursor = $windowStart->copy()->startOfWeek(Carbon::MONDAY); // Start from Monday
                         $totalCreated = 0;
                         while ($cursor->lte($windowEnd)) {
                             $weekDays = !empty($daysOfWeek) ? $daysOfWeek : [ (int)$cursor->copy()->dayOfWeek ];
                             sort($weekDays);
                             foreach ($weekDays as $dow) {
-                                $date = $cursor->copy()->startOfWeek()->addDays($dow);
+                                // Convert from frontend format to Carbon format
+                                // Frontend: 0=Sunday, 1=Monday, 2=Tuesday, etc.
+                                // Carbon with startOfWeek(MONDAY): 0=Monday, 1=Tuesday, 2=Wednesday, etc.
+                                // So we need to adjust: if dow=0 (Sunday), it should be 6 (last day of week)
+                                // if dow=1 (Monday), it should be 0 (first day of week), etc.
+                                $carbonDow = $dow === 0 ? 6 : $dow - 1; // Convert Sunday=0 to 6, Monday=1 to 0, etc.
+                                $date = $cursor->copy()->startOfWeek(Carbon::MONDAY)->addDays($carbonDow);
                                 if ($date->lt($windowStart) || $date->gt($windowEnd)) continue;
                                 $payload = $base;
                                 $payload['scheduled_date'] = $date->toDateString();
@@ -375,7 +416,7 @@ class TodoController extends Controller
                         }
                     } elseif ($unit === 'month') {
                         $windowEnd = $windowStart->copy()->addMonths(1);
-                        $cursor = $windowStart->copy()->startOfMonth();
+                        $cursor = $windowStart->copy(); // Use actual start date, not start of month
                         $totalCreated = 0;
                         while ($cursor->lte($windowEnd)) {
                             $date = $cursor->copy();
@@ -431,12 +472,14 @@ class TodoController extends Controller
             'scheduled_date' => 'nullable|date',
             'target_start_at' => 'nullable|date',
             'target_end_at' => 'nullable|date|after:target_start_at',
+            'target_duration_value' => 'nullable|integer|min:1',
+            'target_duration_unit' => 'nullable|in:minutes,hours',
             'todo_type' => 'nullable|in:rutin,tambahan',
             'target_category' => 'nullable|in:all,ob,driver,security',
             // routine definition (if admin wants to adjust definition fields stored with each row)
             'recurrence_start_date' => 'nullable|date',
             'recurrence_interval' => 'nullable|integer|min:1',
-            'recurrence_unit' => 'nullable|in:day,week,month,year',
+            'recurrence_unit' => 'nullable|in:day,week,month',
             'recurrence_count' => 'nullable|integer|min:0',
             'occurrences_per_interval' => 'nullable|integer|min:1',
             'days_of_week' => 'nullable|array',
@@ -464,8 +507,8 @@ class TodoController extends Controller
         $todo = Todo::where('user_id', $request->user()->id)->findOrFail($id);
 
         $currentStatus = $todo->status;
-        // 1) After checking phase (evaluating/reworked/completed) => block any edits
-        if (in_array($currentStatus, ['evaluating', 'reworked', 'completed'])) {
+        // 1) After checking phase (evaluating/completed) => block any edits
+        if (in_array($currentStatus, ['evaluating', 'completed'])) {
             return response()->json([
                 'message' => 'Todo can no longer be edited after the checking phase'
             ], 422);
@@ -503,8 +546,8 @@ class TodoController extends Controller
             ]);
         }
 
-        // 3) During checking => allow evidence addition/replacement (text changes ignored)
-        if ($currentStatus === 'checking') {
+        // 3) During checking or evaluating => allow evidence addition/replacement (text changes ignored)
+        if (in_array($currentStatus, ['checking', 'evaluating'])) {
             // Evidence is mandatory for update during checking
             $hasEvidence = $request->hasFile('evidence') ||
                           (is_array($request->file('evidence')) && count(array_filter($request->file('evidence'))) > 0);
@@ -639,8 +682,13 @@ class TodoController extends Controller
             return response()->json(['message' => 'Can only hold todos that are in progress'], 422);
         }
 
+        $data = $request->validate([
+            'hold_note' => 'required|string|max:500'
+        ]);
+
         $todo->update([
-            'status' => 'hold'
+            'status' => 'hold',
+            'hold_note' => $data['hold_note']
         ]);
 
         return response()->json([
@@ -817,12 +865,9 @@ class TodoController extends Controller
         $todo = Todo::findOrFail($id);
 
         $data = $request->validate([
-            'action' => 'required|in:approve',
+            'action' => 'required|in:approve,rework',
             'type' => 'required|in:individual,overall',
-            'notes' => 'nullable|string|max:500',
-            'warning_points' => 'nullable|integer|min:0|max:300',
-            'warning_note' => 'nullable|string|max:500',
-            'rating' => 'nullable|integer|min:0|max:100'
+            'notes' => 'nullable|string|max:500'
         ]);
 
         if ($todo->status !== 'checking') {
@@ -839,37 +884,69 @@ class TodoController extends Controller
             $totalMinutes = Carbon::parse($todo->started_at)->diffInMinutes(Carbon::parse($todo->submitted_at));
         }
 
+        // Calculate target duration from new target_duration fields or fallback to old method
+        $targetDuration = null;
+        if ($todo->target_duration_value && $todo->target_duration_unit) {
+            // Use new target_duration fields
+            $targetDuration = $todo->target_duration_unit === 'hours' 
+                ? $todo->target_duration_value * 60 
+                : $todo->target_duration_value;
+        } elseif ($todo->target_start_at && $todo->target_end_at) {
+            // Fallback to old method for backward compatibility
+            $targetDuration = Carbon::parse($todo->target_start_at)->diffInMinutes(Carbon::parse($todo->target_end_at));
+        }
+
+        // Calculate automatic rating based on duration vs target
+        $automaticRating = null;
+        if ($data['action'] === 'approve' && $totalMinutes && $targetDuration) {
+            $automaticRating = $this->calculateAutomaticRating($totalMinutes, $targetDuration);
+        }
+
+        // Determine next status based on action
+        $nextStatus = $data['action'] === 'approve' ? 'completed' : 'evaluating';
+
         $todo->update([
-            'status' => 'completed',
+            'status' => $nextStatus,
             'notes' => $data['notes'] ?? $todo->notes,
             'checked_by' => $request->user()->id,
             'checker_display' => $checkerDisplay,
             'total_work_time' => $totalMinutes,
             'total_work_time_formatted' => $this->formatDuration($totalMinutes),
-            'rating' => $data['rating'] ?? null,
+            'rating' => $automaticRating,
         ]);
 
-        $points = (int)($data['warning_points'] ?? 0);
-        if ($points > 0) {
+        // Automatic warning points based on rating
+        if ($automaticRating !== null && $automaticRating < 60) {
+            $points = 0;
             $level = null;
-            if ($points >= 1 && $points <= 35) {
-                $level = 'low';
-            } elseif ($points >= 36 && $points <= 65) {
-                $level = 'medium';
-            } elseif ($points >= 66) {
+            
+            if ($automaticRating < 30) {
+                $points = 100; // Very poor performance
                 $level = 'high';
+            } elseif ($automaticRating < 45) {
+                $points = 75; // Poor performance
+                $level = 'high';
+            } elseif ($automaticRating < 60) {
+                $points = 50; // Below average performance
+                $level = 'medium';
             }
 
-            $todo->warnings()->create([
-                'evaluator_id' => $request->user()->id,
-                'points' => $points,
-                'level' => $level,
-                'note' => $data['warning_note'] ?? null,
-            ]);
+            if ($points > 0) {
+                $todo->warnings()->create([
+                    'evaluator_id' => $request->user()->id,
+                    'points' => $points,
+                    'level' => $level,
+                    'note' => 'Automatic warning based on performance rating',
+                ]);
+            }
         }
 
+        $message = $data['action'] === 'approve' 
+            ? 'Todo approved and completed' 
+            : 'Todo marked for rework';
+
         return response()->json([
-            'message' => 'Todo approved and completed',
+            'message' => $message,
             'todo' => new TodoResource($todo)
         ]);
     }
@@ -979,7 +1056,7 @@ class TodoController extends Controller
             }
 
             $todo->update([
-                'status' => 'reworked',
+                'status' => 'checking',
                 'submitted_at' => $now,
                 'evidence_path' => $path,
                 'evidence_paths' => $storedPaths ?? []
@@ -996,6 +1073,55 @@ class TodoController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    // GA: approve improvement from evaluating status -> completed
+    public function approveImprovement(Request $request, $id)
+    {
+        $todo = Todo::findOrFail($id);
+
+        if ($todo->status !== 'evaluating') {
+            return response()->json(['message' => 'Todo is not in evaluation phase'], 422);
+        }
+
+        $data = $request->validate([
+            'notes' => 'nullable|string|max:500'
+        ]);
+
+        $checkerName = $request->user()->name;
+        $checkerRole = $request->user()->role;
+        $checkerDisplay = "{$checkerName} ({$checkerRole})";
+
+        // Calculate target duration from new target_duration fields or fallback to old method
+        $targetDuration = null;
+        if ($todo->target_duration_value && $todo->target_duration_unit) {
+            // Use new target_duration fields
+            $targetDuration = $todo->target_duration_unit === 'hours' 
+                ? $todo->target_duration_value * 60 
+                : $todo->target_duration_value;
+        } elseif ($todo->target_start_at && $todo->target_end_at) {
+            // Fallback to old method for backward compatibility
+            $targetDuration = Carbon::parse($todo->target_start_at)->diffInMinutes(Carbon::parse($todo->target_end_at));
+        }
+
+        // Calculate automatic rating based on duration vs target
+        $automaticRating = null;
+        if ($todo->total_work_time && $targetDuration) {
+            $automaticRating = $this->calculateAutomaticRating($todo->total_work_time, $targetDuration);
+        }
+
+        $todo->update([
+            'status' => 'completed',
+            'notes' => $data['notes'] ?? $todo->notes,
+            'checked_by' => $request->user()->id,
+            'checker_display' => $checkerDisplay,
+            'rating' => $automaticRating,
+        ]);
+
+        return response()->json([
+            'message' => 'Improvement approved and todo completed',
+            'todo' => new TodoResource($todo)
+        ]);
     }
 
     // GA: overall performance evaluation
@@ -1219,7 +1345,7 @@ class TodoController extends Controller
         $request->validate([
             'title' => 'required|string',
             'recurrence_interval' => 'nullable|integer',
-            'recurrence_unit' => 'nullable|in:day,week,month,year',
+            'recurrence_unit' => 'nullable|in:day,week,month',
             'target_category' => 'nullable|in:all,ob,driver,security',
             'user_id' => 'nullable|integer',
             'recurrence_count' => 'nullable|integer',

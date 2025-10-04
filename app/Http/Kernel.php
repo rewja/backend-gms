@@ -45,6 +45,7 @@ class Kernel extends HttpKernel
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \App\Http\Middleware\LargeFileUploadMiddleware::class,
             \App\Http\Middleware\FileUploadMiddleware::class,
+            \App\Http\Middleware\ActivityLoggingMiddleware::class,
         ],
     ];
 

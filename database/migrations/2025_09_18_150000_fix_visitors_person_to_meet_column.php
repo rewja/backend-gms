@@ -16,7 +16,9 @@ return new class extends Migration
         // If legacy column exists, make it nullable to avoid insert errors
         if (Schema::hasColumn('visitors', 'person_to_meet')) {
             // Use raw SQL to avoid requiring doctrine/dbal for column modification
-            DB::statement("ALTER TABLE visitors MODIFY person_to_meet VARCHAR(191) NULL");
+            if (Schema::getConnection()->getDriverName() === 'mysql') {
+                DB::statement("ALTER TABLE visitors MODIFY person_to_meet VARCHAR(191) NULL");
+            }
         }
 
         // Ensure new column exists as nullable (our code uses meet_with)

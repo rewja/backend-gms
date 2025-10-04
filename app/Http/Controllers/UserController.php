@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\ActivityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
@@ -28,15 +29,22 @@ class UserController extends Controller
             'name' => 'required|string|max:100',
             'email' => 'required|email|unique:users',
             'password' => 'required|string|min:6',
-            'role' => 'required|in:user,admin,procurement',
+            'role' => 'required|in:user,admin_ga,admin_ga_manager',
             'department' => 'nullable|string|max:100',
             'position' => 'nullable|string|max:100',
-            'category' => 'nullable|in:ob,driver,security',
+            'category' => 'nullable|in:ob,driver,security,magang_pkl',
         ]);
 
         $data['password'] = Hash::make($data['password']);
 
         $user = User::create($data);
+
+        // Log user creation activity
+        ActivityService::logCreate(
+            $user,
+            $request->user()->id,
+            $request
+        );
 
         return response()->json(['message' => 'User created successfully', 'user' => $user], 201);
     }
@@ -50,11 +58,14 @@ class UserController extends Controller
             'name' => 'sometimes|string|max:100',
             'email' => 'sometimes|email|unique:users,email,' . $user->id,
             'password' => 'nullable|string|min:6',
-            'role' => 'sometimes|in:user,admin,procurement',
+            'role' => 'sometimes|in:user,admin_ga,admin_ga_manager',
             'department' => 'nullable|string|max:100',
             'position' => 'nullable|string|max:100',
-            'category' => 'nullable|in:ob,driver,security',
+            'category' => 'nullable|in:ob,driver,security,magang_pkl',
         ]);
+
+        // Store old values for logging
+        $oldValues = $user->toArray();
 
         if (!empty($data['password'])) {
             $data['password'] = Hash::make($data['password']);
@@ -64,6 +75,14 @@ class UserController extends Controller
 
         $user->update($data);
 
+        // Log user update activity
+        ActivityService::logUpdate(
+            $user,
+            $request->user()->id,
+            $oldValues,
+            $request
+        );
+
         return response()->json(['message' => 'User updated successfully', 'user' => $user]);
     }
 
@@ -71,6 +90,17 @@ class UserController extends Controller
     public function destroy($id)
     {
         $user = User::findOrFail($id);
+        
+        // Get current user from request (we need to access it differently)
+        $currentUser = request()->user();
+        
+        // Log user deletion activity before deleting
+        ActivityService::logDelete(
+            $user,
+            $currentUser->id,
+            request()
+        );
+        
         $user->delete();
 
         return response()->json(['message' => 'User deleted successfully']);

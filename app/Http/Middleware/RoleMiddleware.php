@@ -20,7 +20,7 @@ class RoleMiddleware
         }
 
         // Admin bypass
-        if ($user->role === 'admin') {
+        if ($user->role === 'admin_ga') {
             return $next($request);
         }
 

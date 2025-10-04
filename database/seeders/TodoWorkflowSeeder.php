@@ -16,10 +16,10 @@ class TodoWorkflowSeeder extends Seeder
     {
         // Create test users
         $user = User::firstOrCreate([
-            'email' => 'testuser@example.com'
+            'email' => 'user@example.com'
         ], [
-            'name' => 'Test User',
-            'password' => bcrypt('password'),
+            'name' => 'User',
+            'password' => bcrypt('password123'),
             'role' => 'user'
         ]);
 
@@ -27,7 +27,7 @@ class TodoWorkflowSeeder extends Seeder
             'email' => 'ga@example.com'
         ], [
             'name' => 'GA User',
-            'password' => bcrypt('password'),
+            'password' => bcrypt('password123'),
             'role' => 'admin'
         ]);
 
@@ -238,7 +238,7 @@ class TodoWorkflowSeeder extends Seeder
         $this->command->info('Created 10 test todos for regular user');
         $this->command->info('Created 3 test todos for GA user');
         $this->command->info('Total: 13 todos with different statuses');
-        $this->command->info('Test user: testuser@example.com / password');
-        $this->command->info('GA user: ga@example.com / password');
+        $this->command->info('Test user: user@example.com / password123');
+        $this->command->info('GA user: ga@example.com / password123');
     }
 }

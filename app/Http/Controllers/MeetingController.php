@@ -11,7 +11,7 @@ class MeetingController extends Controller
     public function index(Request $request)
     {
         $query = Meeting::with('user');
-        if ($request->user()->role !== 'admin') {
+        if ($request->user()->role !== 'admin_ga') {
             $query->where('user_id', $request->user()->id);
         }
         return response()->json($query->latest()->get());
@@ -20,7 +20,7 @@ class MeetingController extends Controller
     // Stats: counts per day/month/year, average duration, top rooms
     public function stats(Request $request)
     {
-        $isAdmin = $request->user()->role === 'admin';
+        $isAdmin = $request->user()->role === 'admin_ga';
         $base = \DB::table('meetings');
         if (!$isAdmin) {
             $base->where('user_id', $request->user()->id);
@@ -110,7 +110,7 @@ class MeetingController extends Controller
     public function show(Request $request, Meeting $meeting)
     {
         // Check if user has access to this meeting
-        if ($request->user()->role !== 'admin' && $meeting->user_id !== $request->user()->id) {
+        if ($request->user()->role !== 'admin_ga' && $meeting->user_id !== $request->user()->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
         
@@ -170,7 +170,7 @@ class MeetingController extends Controller
 
     private function authorizeUser(Request $request, Meeting $meeting): void
     {
-        if ($request->user()->role !== 'admin' && $meeting->user_id !== $request->user()->id) {
+        if ($request->user()->role !== 'admin_ga' && $meeting->user_id !== $request->user()->id) {
             abort(response()->json(['message' => 'Unauthorized'], 403));
         }
     }
@@ -183,7 +183,7 @@ class MeetingController extends Controller
         // Only creator or admin can delete
         // Note: route model binding provides $meeting
         // We will authorize using same rule as other actions
-        request()->user()->role === 'admin' || $meeting->user_id === request()->user()->id
+        request()->user()->role === 'admin_ga' || $meeting->user_id === request()->user()->id
             ?: abort(response()->json(['message' => 'Unauthorized'], 403));
 
         $meeting->delete();
