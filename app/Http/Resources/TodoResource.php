@@ -89,6 +89,11 @@ class TodoResource extends JsonResource
             'target_end_at' => $formatJakarta($this->target_end_at),
             'target_duration_value' => $this->target_duration_value,
             'target_duration_unit' => $this->target_duration_unit,
+            'target_duration_formatted' => $this->target_duration_value && $this->target_duration_unit 
+                ? ($this->target_duration_unit === 'hours' 
+                    ? $this->target_duration_value . ' jam' 
+                    : $this->target_duration_value . ' menit')
+                : null,
             'started_at' => $formatJakarta($this->started_at),
             'submitted_at' => $formatJakarta($this->submitted_at),
             // Raw ISO timestamps for form editing
@@ -108,6 +113,7 @@ class TodoResource extends JsonResource
             'created_at' => $this->created_at->timezone('Asia/Jakarta')->locale('id')->translatedFormat('l, d F Y H:i:s'),
             'formatted_created_at' => $this->created_at->timezone('Asia/Jakarta')->locale('id')->translatedFormat('l, d F Y H:i:s'),
             'evidence_files' => $evidenceFiles,
+            'evidence_note' => $this->evidence_note,
         ];
 
         // Only include updated_at if it's different from created_at

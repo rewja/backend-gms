@@ -31,6 +31,7 @@ class Todo extends Model
         'evidence_name',  // Tambahkan ini untuk single evidence name
         'evidence_paths', // Tambahkan ini untuk multiple files
         'evidence_names', // Tambahkan ini untuk multiple evidence names
+        'evidence_note',  // Tambahkan ini untuk catatan evidence
         'checked_by',
         'notes',
         'hold_note',

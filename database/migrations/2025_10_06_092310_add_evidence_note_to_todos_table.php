@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('todos', function (Blueprint $table) {
-            $table->text('hold_note')->nullable()->after('notes')->comment('Reason for putting task on hold');
+            $table->text('evidence_note')->nullable()->after('evidence_names');
         });
     }
 
@@ -22,37 +22,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('todos', function (Blueprint $table) {
-            $table->dropColumn('hold_note');
+            $table->dropColumn('evidence_note');
         });
     }
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
