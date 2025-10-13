@@ -98,6 +98,7 @@ class MeetingController extends Controller
         ]);
 
         $data['user_id'] = $request->user()->id;
+        $data['booking_type'] = 'internal';
 
         $meeting = Meeting::create($data);
 
@@ -188,5 +189,162 @@ class MeetingController extends Controller
 
         $meeting->delete();
         return response()->json(['message' => 'Meeting deleted']);
+    }
+
+    // ==================== MEETING ROOM PUBLIC ENDPOINTS ====================
+    
+    /**
+     * Get available rooms for public booking
+     */
+    public function getRooms()
+    {
+        $rooms = [
+            [
+                'id' => 'room-a-08',
+                'name' => 'Meeting Room A (08)',
+                'capacity' => 8,
+                'location' => 'Floor 1',
+                'amenities' => ['Projector', 'Whiteboard', 'Air Conditioning']
+            ],
+            [
+                'id' => 'room-b-08',
+                'name' => 'Meeting Room B (08)',
+                'capacity' => 8,
+                'location' => 'Floor 1',
+                'amenities' => ['Projector', 'Whiteboard', 'Air Conditioning']
+            ],
+            [
+                'id' => 'room-a-689',
+                'name' => 'Meeting Room A (689)',
+                'capacity' => 12,
+                'location' => 'Floor 2',
+                'amenities' => ['Projector', 'Whiteboard', 'Air Conditioning', 'Video Conference']
+            ],
+            [
+                'id' => 'room-b-689',
+                'name' => 'Meeting Room B (689)',
+                'capacity' => 12,
+                'location' => 'Floor 2',
+                'amenities' => ['Projector', 'Whiteboard', 'Air Conditioning', 'Video Conference']
+            ]
+        ];
+
+        return response()->json($rooms);
+    }
+
+    /**
+     * Get public bookings (for display purposes)
+     */
+    public function getPublicBookings(Request $request)
+    {
+        $query = Meeting::with('user');
+        
+        // Filter by date if provided
+        if ($request->has('date')) {
+            $date = $request->get('date');
+            $query->whereDate('start_time', $date);
+        }
+        
+        // Filter by room if provided
+        if ($request->has('room')) {
+            $query->where('room_name', $request->get('room'));
+        }
+
+        $bookings = $query->orderBy('start_time')->get();
+
+        return response()->json($bookings);
+    }
+
+    /**
+     * Public booking endpoint (no authentication required)
+     */
+    public function publicBook(Request $request)
+    {
+        $data = $request->validate([
+            'room_name' => 'required|string|max:100',
+            'agenda' => 'required|string',
+            'start_time' => 'required|date|after_or_equal:now',
+            'end_time' => 'required|date|after:start_time',
+            'organizer_name' => 'required|string|max:255',
+            'organizer_email' => 'required|email|max:255',
+            'organizer_phone' => 'nullable|string|max:20',
+            'attendees' => 'nullable|array',
+            'attendees.*.name' => 'required_with:attendees|string|max:255',
+            'attendees.*.email' => 'required_with:attendees|email|max:255',
+            'special_requirements' => 'nullable|string',
+        ]);
+
+        // Check for conflicts
+        $conflict = Meeting::where('room_name', $data['room_name'])
+            ->where(function ($query) use ($data) {
+                $query->whereBetween('start_time', [$data['start_time'], $data['end_time']])
+                    ->orWhereBetween('end_time', [$data['start_time'], $data['end_time']])
+                    ->orWhere(function ($q) use ($data) {
+                        $q->where('start_time', '<=', $data['start_time'])
+                          ->where('end_time', '>=', $data['end_time']);
+                    });
+            })
+            ->where('status', '!=', 'canceled')
+            ->first();
+
+        if ($conflict) {
+            return response()->json([
+                'message' => 'Room is not available for the selected time slot',
+                'conflict' => $conflict
+            ], 409);
+        }
+
+        // Create a meeting for public booking
+        $meetingData = [
+            'room_name' => $data['room_name'],
+            'agenda' => $data['agenda'],
+            'start_time' => $data['start_time'],
+            'end_time' => $data['end_time'],
+            'status' => 'scheduled',
+            'booking_type' => 'public',
+            'user_id' => null, // No user for public bookings
+            'organizer_name' => $data['organizer_name'],
+            'organizer_email' => $data['organizer_email'],
+            'organizer_phone' => $data['organizer_phone'] ?? null,
+            'attendees' => $data['attendees'] ?? [],
+            'special_requirements' => $data['special_requirements'] ?? null,
+        ];
+
+        $meeting = Meeting::create($meetingData);
+
+        return response()->json([
+            'message' => 'Meeting room booked successfully',
+            'meeting' => $meeting,
+            'booking_id' => $meeting->id
+        ], 201);
+    }
+
+    /**
+     * Check room availability
+     */
+    public function checkAvailability(Request $request)
+    {
+        $request->validate([
+            'room_name' => 'required|string',
+            'start_time' => 'required|date',
+            'end_time' => 'required|date|after:start_time',
+        ]);
+
+        $conflict = Meeting::where('room_name', $request->room_name)
+            ->where(function ($query) use ($request) {
+                $query->whereBetween('start_time', [$request->start_time, $request->end_time])
+                    ->orWhereBetween('end_time', [$request->start_time, $request->end_time])
+                    ->orWhere(function ($q) use ($request) {
+                        $q->where('start_time', '<=', $request->start_time)
+                          ->where('end_time', '>=', $request->end_time);
+                    });
+            })
+            ->where('status', '!=', 'canceled')
+            ->first();
+
+        return response()->json([
+            'available' => !$conflict,
+            'conflict' => $conflict
+        ]);
     }
 }

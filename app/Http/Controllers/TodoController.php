@@ -383,9 +383,18 @@ class TodoController extends Controller
                         while ($cursor->lte($windowEnd)) {
                             $payload = $base;
                             $payload['scheduled_date'] = $cursor->toDateString();
-                            $todo = Todo::create($payload);
-                            $createdTodos[] = new TodoResource($todo);
-                            $totalCreated++;
+                            // TODO: review this merge decision — prevent duplicate routine entries per (user,title,scheduled_date)
+                            $exists = Todo::where('user_id', $payload['user_id'] ?? null)
+                                ->whereRaw('LOWER(title) = ?', [mb_strtolower($payload['title'] ?? '')])
+                                ->whereDate('scheduled_date', $payload['scheduled_date'])
+                                ->exists();
+                            if ($exists) {
+                                // skip duplicate
+                            } else {
+                                $todo = Todo::create($payload);
+                                $createdTodos[] = new TodoResource($todo);
+                                $totalCreated++;
+                            }
                             if ($repeatCount > 0 && $totalCreated >= $repeatCount) break;
                             $cursor->addDays($interval);
                         }
@@ -407,9 +416,18 @@ class TodoController extends Controller
                                 if ($date->lt($windowStart) || $date->gt($windowEnd)) continue;
                                 $payload = $base;
                                 $payload['scheduled_date'] = $date->toDateString();
-                                $todo = Todo::create($payload);
-                                $createdTodos[] = new TodoResource($todo);
-                                $totalCreated++;
+                                // TODO: review this merge decision — prevent duplicate routine entries per (user,title,scheduled_date)
+                                $exists = Todo::where('user_id', $payload['user_id'] ?? null)
+                                    ->whereRaw('LOWER(title) = ?', [mb_strtolower($payload['title'] ?? '')])
+                                    ->whereDate('scheduled_date', $payload['scheduled_date'])
+                                    ->exists();
+                                if ($exists) {
+                                    // skip duplicate
+                                } else {
+                                    $todo = Todo::create($payload);
+                                    $createdTodos[] = new TodoResource($todo);
+                                    $totalCreated++;
+                                }
                                 if ($repeatCount > 0 && $totalCreated >= $repeatCount) break 2;
                             }
                             $cursor->addWeeks($interval);
@@ -422,9 +440,18 @@ class TodoController extends Controller
                             $date = $cursor->copy();
                             $payload = $base;
                             $payload['scheduled_date'] = $date->toDateString();
-                            $todo = Todo::create($payload);
-                            $createdTodos[] = new TodoResource($todo);
-                            $totalCreated++;
+                            // TODO: review this merge decision — prevent duplicate routine entries per (user,title,scheduled_date)
+                            $exists = Todo::where('user_id', $payload['user_id'] ?? null)
+                                ->whereRaw('LOWER(title) = ?', [mb_strtolower($payload['title'] ?? '')])
+                                ->whereDate('scheduled_date', $payload['scheduled_date'])
+                                ->exists();
+                            if ($exists) {
+                                // skip duplicate
+                            } else {
+                                $todo = Todo::create($payload);
+                                $createdTodos[] = new TodoResource($todo);
+                                $totalCreated++;
+                            }
                             if ($repeatCount > 0 && $totalCreated >= $repeatCount) break;
                             $cursor->addMonths($interval);
                         }
@@ -435,9 +462,18 @@ class TodoController extends Controller
                         while ($cursor->lte($windowEnd)) {
                             $payload = $base;
                             $payload['scheduled_date'] = $cursor->toDateString();
-                            $todo = Todo::create($payload);
-                            $createdTodos[] = new TodoResource($todo);
-                            $totalCreated++;
+                            // TODO: review this merge decision — prevent duplicate routine entries per (user,title,scheduled_date)
+                            $exists = Todo::where('user_id', $payload['user_id'] ?? null)
+                                ->whereRaw('LOWER(title) = ?', [mb_strtolower($payload['title'] ?? '')])
+                                ->whereDate('scheduled_date', $payload['scheduled_date'])
+                                ->exists();
+                            if ($exists) {
+                                // skip duplicate
+                            } else {
+                                $todo = Todo::create($payload);
+                                $createdTodos[] = new TodoResource($todo);
+                                $totalCreated++;
+                            }
                             if ($repeatCount > 0 && $totalCreated >= $repeatCount) break;
                             $cursor->addYears($interval);
                         }

@@ -409,4 +409,66 @@ class RequestItemController extends Controller
             'request' => $item->fresh(['assets']),
         ]);
     }
+
+    // GA Manager: final approval (second approval)
+    public function finalApprove(Request $request, $id)
+    {
+        $currentUser = $request->user();
+        if (!in_array($currentUser->role ?? '', ['admin_ga_manager', 'super_admin'])) {
+            return response()->json(['message' => 'Unauthorized. Only GA Manager and Super Admin can perform final approval.'], 403);
+        }
+
+        $item = RequestItem::findOrFail($id);
+
+        if ($item->status !== 'approved') {
+            return response()->json(['message' => 'Request must be approved by GA first'], 422);
+        }
+
+        $data = $request->validate([
+            'final_note' => 'nullable|string',
+        ]);
+
+        $item->update([
+            'status' => 'final_approved',
+            'final_approved_by' => $currentUser->id,
+            'final_approved_at' => now(),
+            'final_note' => $data['final_note'] ?? null,
+        ]);
+
+        return response()->json([
+            'message' => 'Request finally approved',
+            'request' => $item,
+        ]);
+    }
+
+    // GA Manager: final rejection (second rejection)
+    public function finalReject(Request $request, $id)
+    {
+        $currentUser = $request->user();
+        if (!in_array($currentUser->role ?? '', ['admin_ga_manager', 'super_admin'])) {
+            return response()->json(['message' => 'Unauthorized. Only GA Manager and Super Admin can perform final rejection.'], 403);
+        }
+
+        $item = RequestItem::findOrFail($id);
+
+        if ($item->status !== 'approved') {
+            return response()->json(['message' => 'Request must be approved by GA first'], 422);
+        }
+
+        $data = $request->validate([
+            'final_rejection_reason' => 'required|string',
+        ]);
+
+        $item->update([
+            'status' => 'final_rejected',
+            'final_rejected_by' => $currentUser->id,
+            'final_rejected_at' => now(),
+            'final_rejection_reason' => $data['final_rejection_reason'],
+        ]);
+
+        return response()->json([
+            'message' => 'Request finally rejected',
+            'request' => $item,
+        ]);
+    }
 }

@@ -45,7 +45,7 @@ Route::middleware(['auth:sanctum', 'role:user'])->prefix('activities')->group(fu
     Route::get('/stats', [ActivityController::class, 'stats']);
 });
 
-// Admin: view all activities
+// Admin GA and GA Manager: view all activities (can see all user activities)
 Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin'])->prefix('activities')->group(function () {
     Route::get('/', [ActivityController::class, 'index']);
     Route::get('/stats', [ActivityController::class, 'stats']);
@@ -74,11 +74,13 @@ Route::middleware(['auth:sanctum', 'role:user'])->prefix('todos')->group(functio
 });
 
 // Admin: create todos for users (kept for compatibility)
+// TODO: review this merge decision — role naming differs in friend's version ('admin')
 Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin'])->prefix('todos')->group(function () {
     Route::post('/', [TodoController::class, 'store']);                   // create todo (admin only)
 });
 
 // Admin/GA: manage all todos - FIXED role permission
+// TODO: review this merge decision — friend's version had 'admin,ga'
 Route::middleware(['auth:sanctum'])->prefix('todos')->group(function () {
     // Allow both admin and GA to access these routes
     Route::get('/all', [TodoController::class, 'indexAll'])->middleware('role:admin_ga,admin_ga_manager,super_admin'); // ?user_id=ID optional
@@ -111,6 +113,7 @@ Route::middleware(['auth:sanctum', 'role:user'])->prefix('requests')->group(func
     Route::delete('/{id}', [RequestItemController::class, 'destroy']);
 });
 // Admin GA: manage requests (first approval)
+// TODO: review this merge decision — friend's version allowed 'admin'
 Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin'])->prefix('requests')->group(function () {
     Route::get('/', [RequestItemController::class, 'index']);
     Route::get('/stats/global', [RequestItemController::class, 'statsGlobal']);
@@ -122,6 +125,7 @@ Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin']
 });
 
 // GA Manager: final approval (second approval)
+// TODO: review this merge decision — friend's version restricted to 'admin'
 Route::middleware(['auth:sanctum', 'role:admin_ga_manager,super_admin'])->prefix('requests')->group(function () {
     Route::patch('/{id}/final-approve', [RequestItemController::class, 'finalApprove']);
     Route::patch('/{id}/final-reject', [RequestItemController::class, 'finalReject']);
@@ -137,18 +141,19 @@ Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin']
 });
 
 // Procurement: read and edit requests (no approve/reject)
+// TODO: review this merge decision — friend's version used 'procurement'
 Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin'])->prefix('requests')->group(function () {
     Route::get('/', [RequestItemController::class, 'index']);
     Route::patch('/{id}', [RequestItemController::class, 'updateAdmin']);
 });
 
 // ---------------- PROCUREMENT ----------------
-Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin'])->prefix('procurements')->group(function () {
+Route::middleware(['auth:sanctum', 'role:procurement,admin_ga,admin_ga_manager,super_admin'])->prefix('procurements')->group(function () {
     Route::get('/', [ProcurementController::class, 'index']);
     Route::post('/', [ProcurementController::class, 'store']);
     Route::get('/stats', [ProcurementController::class, 'stats']);
     // Approved requests for procurement to process
-    Route::get('/approved-requests', [RequestItemController::class, 'index'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
+    Route::get('/approved-requests', [RequestItemController::class, 'index']);
 });
 
 // ---------------- ASSETS ----------------
@@ -166,7 +171,7 @@ Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin']
 });
 
 // Procurement: CRUD-minus-create (can read, update, delete) on assets
-Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin'])->prefix('assets')->group(function () {
+Route::middleware(['auth:sanctum', 'role:procurement,admin_ga,admin_ga_manager,super_admin'])->prefix('assets')->group(function () {
     Route::get('/', [AssetController::class, 'index']);
     Route::get('/stats', [AssetController::class, 'stats']);
     Route::get('/{id}', [AssetController::class, 'show']);
