@@ -12,6 +12,7 @@ class Meeting extends Model
         'attendees' => 'array',
         'start_time' => 'datetime',
         'end_time' => 'datetime',
+        'waktu_penyelesaian' => 'date',
     ];
 
     // Relasi: Meeting dibuat oleh User

@@ -223,6 +223,22 @@ Route::middleware('auth:sanctum')->prefix('meetings')->group(function () {
     Route::delete('/{meeting}', [MeetingController::class, 'destroy']);
 });
 
+// ---------------- PUBLIC MEETING-ROOM ENDPOINTS (no auth) ----------------
+// These endpoints are used by the separate meeting-room frontend (Vite dev on :5173/:5174)
+Route::prefix('meeting-room')->group(function () {
+    // Available rooms (static for now)
+    Route::get('/rooms', [MeetingController::class, 'getRooms']);
+
+    // Public bookings list (for calendar/schedule display)
+    Route::get('/bookings', [MeetingController::class, 'getPublicBookings']);
+
+    // Check availability
+    Route::post('/availability', [MeetingController::class, 'checkAvailability']);
+
+    // Public booking submit (multipart/form-data for SPK file)
+    Route::post('/book', [MeetingController::class, 'publicBook']);
+});
+
 // ---------------- VISITORS ----------------
 Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin'])->prefix('visitors')->group(function () {
     Route::get('/', [VisitorController::class, 'index']);

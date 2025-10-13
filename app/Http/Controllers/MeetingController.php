@@ -266,13 +266,35 @@ class MeetingController extends Controller
             'start_time' => 'required|date|after_or_equal:now',
             'end_time' => 'required|date|after:start_time',
             'organizer_name' => 'required|string|max:255',
-            'organizer_email' => 'required|email|max:255',
+            'organizer_email' => 'nullable|email|max:255',
             'organizer_phone' => 'nullable|string|max:20',
             'attendees' => 'nullable|array',
             'attendees.*.name' => 'required_with:attendees|string|max:255',
             'attendees.*.email' => 'required_with:attendees|email|max:255',
             'special_requirements' => 'nullable|string',
+            'jumlah_peserta' => 'required|integer|min:1',
+            // Accept both business terms and DB enum terms; we'll map below
+            'prioritas' => 'required|string|in:regular,vip,low,medium,high,urgent',
         ]);
+
+        // Handle SPK file upload
+        $spkFilePath = null;
+        if ($request->hasFile('spk_file')) {
+            $file = $request->file('spk_file');
+            
+            // Validate file
+            $request->validate([
+                'spk_file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240' // 10MB max
+            ]);
+            
+            // Generate unique filename
+            $filename = 'spk_' . time() . '_' . $file->getClientOriginalName();
+            $spkFilePath = $file->storeAs('spk_files', $filename, 'public');
+        } else {
+            return response()->json([
+                'message' => 'File SPK wajib diupload'
+            ], 422);
+        }
 
         // Check for conflicts
         $conflict = Meeting::where('room_name', $data['room_name'])
@@ -294,6 +316,17 @@ class MeetingController extends Controller
             ], 409);
         }
 
+        // Normalize priority to existing DB enum values
+        $priorityMap = [
+            'regular' => 'low',
+            'vip' => 'urgent',
+            'low' => 'low',
+            'medium' => 'medium',
+            'high' => 'high',
+            'urgent' => 'urgent',
+        ];
+        $normalizedPriority = $priorityMap[$data['prioritas']] ?? null;
+
         // Create a meeting for public booking
         $meetingData = [
             'room_name' => $data['room_name'],
@@ -308,6 +341,9 @@ class MeetingController extends Controller
             'organizer_phone' => $data['organizer_phone'] ?? null,
             'attendees' => $data['attendees'] ?? [],
             'special_requirements' => $data['special_requirements'] ?? null,
+            'jumlah_peserta' => $data['jumlah_peserta'],
+            'prioritas' => $normalizedPriority,
+            'spk_file_path' => $spkFilePath,
         ];
 
         $meeting = Meeting::create($meetingData);
