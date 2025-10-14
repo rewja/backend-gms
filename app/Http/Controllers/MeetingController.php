@@ -10,9 +10,10 @@ class MeetingController extends Controller
     // List all meetings for authenticated user (or all for admin)
     public function index(Request $request)
     {
-        $query = Meeting::with('user');
+        $query = Meeting::query();
+        // user_id removed for meeting-room flow; list all for admin, else public endpoints are used
         if ($request->user()->role !== 'admin_ga') {
-            $query->where('user_id', $request->user()->id);
+            // No user filter since user_id column is dropped
         }
         return response()->json($query->latest()->get());
     }
@@ -97,7 +98,7 @@ class MeetingController extends Controller
             'end_time' => 'required|date|after:start_time',
         ]);
 
-        $data['user_id'] = $request->user()->id;
+        // user_id removed; keep booking_type for internal flows if needed
         $data['booking_type'] = 'internal';
 
         $meeting = Meeting::create($data);
@@ -111,11 +112,10 @@ class MeetingController extends Controller
     public function show(Request $request, Meeting $meeting)
     {
         // Check if user has access to this meeting
-        if ($request->user()->role !== 'admin_ga' && $meeting->user_id !== $request->user()->id) {
+        if ($request->user()->role !== 'admin_ga') {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
         
-        $meeting->load('user');
         return response()->json($meeting);
     }
 
@@ -171,7 +171,7 @@ class MeetingController extends Controller
 
     private function authorizeUser(Request $request, Meeting $meeting): void
     {
-        if ($request->user()->role !== 'admin_ga' && $meeting->user_id !== $request->user()->id) {
+        if ($request->user()->role !== 'admin_ga') {
             abort(response()->json(['message' => 'Unauthorized'], 403));
         }
     }
@@ -184,8 +184,7 @@ class MeetingController extends Controller
         // Only creator or admin can delete
         // Note: route model binding provides $meeting
         // We will authorize using same rule as other actions
-        request()->user()->role === 'admin_ga' || $meeting->user_id === request()->user()->id
-            ?: abort(response()->json(['message' => 'Unauthorized'], 403));
+        request()->user()->role === 'admin_ga' ?: abort(response()->json(['message' => 'Unauthorized'], 403));
 
         $meeting->delete();
         return response()->json(['message' => 'Meeting deleted']);
@@ -237,7 +236,7 @@ class MeetingController extends Controller
      */
     public function getPublicBookings(Request $request)
     {
-        $query = Meeting::with('user');
+        $query = Meeting::query();
         
         // Filter by date if provided
         if ($request->has('date')) {
@@ -266,15 +265,12 @@ class MeetingController extends Controller
             'start_time' => 'required|date|after_or_equal:now',
             'end_time' => 'required|date|after:start_time',
             'organizer_name' => 'required|string|max:255',
-            'organizer_email' => 'nullable|email|max:255',
-            'organizer_phone' => 'nullable|string|max:20',
-            'attendees' => 'nullable|array',
-            'attendees.*.name' => 'required_with:attendees|string|max:255',
-            'attendees.*.email' => 'required_with:attendees|email|max:255',
-            'special_requirements' => 'nullable|string',
+            'organizer_email' => 'nullable|email',
             'jumlah_peserta' => 'required|integer|min:1',
-            // Accept both business terms and DB enum terms; we'll map below
-            'prioritas' => 'required|string|in:regular,vip,low,medium,high,urgent',
+            'prioritas' => 'required|string|in:reguler,vip,regular',
+            'kebutuhan' => 'nullable|array',
+            'makanan_detail' => 'nullable|string',
+            'minuman_detail' => 'nullable|string',
         ]);
 
         // Handle SPK file upload
@@ -316,16 +312,8 @@ class MeetingController extends Controller
             ], 409);
         }
 
-        // Normalize priority to existing DB enum values
-        $priorityMap = [
-            'regular' => 'low',
-            'vip' => 'urgent',
-            'low' => 'low',
-            'medium' => 'medium',
-            'high' => 'high',
-            'urgent' => 'urgent',
-        ];
-        $normalizedPriority = $priorityMap[$data['prioritas']] ?? null;
+        // Priority directly uses business terms now
+        $normalizedPriority = strtolower($data['prioritas']) === 'regular' ? 'reguler' : strtolower($data['prioritas']);
 
         // Create a meeting for public booking
         $meetingData = [
@@ -334,16 +322,15 @@ class MeetingController extends Controller
             'start_time' => $data['start_time'],
             'end_time' => $data['end_time'],
             'status' => 'scheduled',
-            'booking_type' => 'public',
-            'user_id' => null, // No user for public bookings
+            'booking_type' => 'external',
             'organizer_name' => $data['organizer_name'],
-            'organizer_email' => $data['organizer_email'],
-            'organizer_phone' => $data['organizer_phone'] ?? null,
-            'attendees' => $data['attendees'] ?? [],
-            'special_requirements' => $data['special_requirements'] ?? null,
+            'organizer_email' => $data['organizer_email'] ?? null,
             'jumlah_peserta' => $data['jumlah_peserta'],
             'prioritas' => $normalizedPriority,
             'spk_file_path' => $spkFilePath,
+            'kebutuhan' => $data['kebutuhan'] ?? null,
+            'makanan_detail' => $data['makanan_detail'] ?? null,
+            'minuman_detail' => $data['minuman_detail'] ?? null,
         ];
 
         $meeting = Meeting::create($meetingData);
