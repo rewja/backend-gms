@@ -270,6 +270,7 @@ class MeetingController extends Controller
             'kebutuhan' => 'nullable|array',
             'makanan_detail' => 'nullable|string',
             'minuman_detail' => 'nullable|string',
+            'lainnya_detail' => 'nullable|string',
         ]);
 
         // Handle SPK file upload
@@ -335,6 +336,7 @@ class MeetingController extends Controller
             'kebutuhan' => $data['kebutuhan'] ?? null,
             'makanan_detail' => $data['makanan_detail'] ?? null,
             'minuman_detail' => $data['minuman_detail'] ?? null,
+            'lainnya_detail' => $data['lainnya_detail'] ?? null,
         ];
 
         $meeting = Meeting::create($meetingData);
