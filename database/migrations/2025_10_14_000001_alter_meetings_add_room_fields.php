@@ -15,11 +15,8 @@ return new class extends Migration
             if (!Schema::hasColumn('meetings', 'organizer_name')) {
                 $table->string('organizer_name', 255)->nullable()->after('agenda');
             }
-            if (!Schema::hasColumn('meetings', 'organizer_email')) {
-                $table->string('organizer_email', 255)->nullable()->after('organizer_name');
-            }
             if (!Schema::hasColumn('meetings', 'jumlah_peserta')) {
-                $table->integer('jumlah_peserta')->nullable()->after('organizer_email');
+                $table->integer('jumlah_peserta')->nullable()->after('organizer_name');
             }
             if (!Schema::hasColumn('meetings', 'prioritas')) {
                 $table->string('prioritas', 20)->nullable()->after('jumlah_peserta');

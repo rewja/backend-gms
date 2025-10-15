@@ -12,9 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('meetings', function (Blueprint $table) {
-            if (!Schema::hasColumn('meetings', 'prioritas')) {
-                $table->enum('prioritas', ['reguler', 'vip'])->nullable()->after('status');
-            }
+            // Change booking_type from string to enum
+            $table->enum('booking_type', ['internal', 'external'])->default('internal')->change();
         });
     }
 
@@ -24,14 +23,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('meetings', function (Blueprint $table) {
-            if (Schema::hasColumn('meetings', 'prioritas')) {
-                $table->dropColumn('prioritas');
-            }
+            // Revert booking_type back to string
+            $table->string('booking_type', 20)->nullable()->change();
         });
     }
 };
-
-
-
-
-

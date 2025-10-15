@@ -12,9 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('meetings', function (Blueprint $table) {
-            if (!Schema::hasColumn('meetings', 'prioritas')) {
-                $table->enum('prioritas', ['reguler', 'vip'])->nullable()->after('status');
-            }
+            // Change prioritas from string to enum
+            $table->enum('prioritas', ['reguler', 'vip'])->default('reguler')->change();
         });
     }
 
@@ -24,14 +23,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('meetings', function (Blueprint $table) {
-            if (Schema::hasColumn('meetings', 'prioritas')) {
-                $table->dropColumn('prioritas');
-            }
+            // Revert prioritas back to string
+            $table->string('prioritas', 20)->nullable()->change();
         });
     }
 };
-
-
-
-
-

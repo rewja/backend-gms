@@ -265,9 +265,8 @@ class MeetingController extends Controller
             'start_time' => 'required|date|after_or_equal:now',
             'end_time' => 'required|date|after:start_time',
             'organizer_name' => 'required|string|max:255',
-            'organizer_email' => 'nullable|email',
             'jumlah_peserta' => 'required|integer|min:1',
-            'prioritas' => 'required|string|in:reguler,vip,regular',
+            'prioritas' => 'required|string|in:reguler,vip',
             'kebutuhan' => 'nullable|array',
             'makanan_detail' => 'nullable|string',
             'minuman_detail' => 'nullable|string',
@@ -312,8 +311,14 @@ class MeetingController extends Controller
             ], 409);
         }
 
-        // Priority directly uses business terms now
-        $normalizedPriority = strtolower($data['prioritas']) === 'regular' ? 'reguler' : strtolower($data['prioritas']);
+        // Priority normalization - ensure it's 'reguler' or 'vip'
+        $normalizedPriority = strtolower($data['prioritas']);
+        if ($normalizedPriority === 'regular') {
+            $normalizedPriority = 'reguler';
+        }
+        if (!in_array($normalizedPriority, ['reguler', 'vip'])) {
+            $normalizedPriority = 'reguler'; // default fallback
+        }
 
         // Create a meeting for public booking
         $meetingData = [
@@ -324,7 +329,6 @@ class MeetingController extends Controller
             'status' => 'scheduled',
             'booking_type' => 'external',
             'organizer_name' => $data['organizer_name'],
-            'organizer_email' => $data['organizer_email'] ?? null,
             'jumlah_peserta' => $data['jumlah_peserta'],
             'prioritas' => $normalizedPriority,
             'spk_file_path' => $spkFilePath,
