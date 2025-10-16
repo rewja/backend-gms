@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\RequestItem;
 use Illuminate\Http\Request;
+use App\Services\ActivityService;
 
 class RequestItemController extends Controller
 {
@@ -37,9 +38,12 @@ class RequestItemController extends Controller
 
         $data['user_id'] = $request->user()->id;
 
-        $req = RequestItem::create($data);
+		$req = RequestItem::create($data);
 
-        return response()->json(['message' => 'Request created successfully', 'request' => $req], 201);
+		// Log create
+		ActivityService::logCreate($req, $request->user()->id, $request);
+
+		return response()->json(['message' => 'Request created successfully', 'request' => $req], 201);
     }
 
     // User: update own request (only when pending)
@@ -58,7 +62,11 @@ class RequestItemController extends Controller
             'reason' => 'nullable|string',
         ]);
 
-        $req->update($data);
+		$oldValues = $req->toArray();
+		$req->update($data);
+
+		// Log update
+		ActivityService::logUpdate($req, $request->user()->id, $oldValues, $request);
         return response()->json(['message' => 'Request updated', 'request' => $req]);
     }
 
@@ -79,11 +87,14 @@ class RequestItemController extends Controller
                 $item->maintenance_status = $firstAsset->maintenance_status;
 
                 // Update request status based on asset status
-                if ($firstAsset->status === 'received') {
-                    $item->status = 'received';
-                } elseif ($firstAsset->status === 'replacing' || $firstAsset->status === 'repairing') {
-                    // If asset is in maintenance, consider request as received
-                    $item->status = 'received';
+                // Do not override when maintenance approval is pending
+                if ($item->status !== 'maintenance_pending_approval') {
+                    if ($firstAsset->status === 'received') {
+                        $item->status = 'received';
+                    } elseif ($firstAsset->status === 'replacing' || $firstAsset->status === 'repairing') {
+                        // If asset is in maintenance, consider request as received
+                        $item->status = 'received';
+                    }
                 }
             }
         }
@@ -182,10 +193,21 @@ class RequestItemController extends Controller
     {
         $req = RequestItem::findOrFail($id);
         // Mark request as approved (DB enum: pending|approved|rejected|purchased)
-        $req->update([
+        $updates = [
             'status' => 'approved',
             'ga_note' => $request->ga_note ?? null,
-        ]);
+        ];
+        // Stamp approver if columns exist
+        if (\Illuminate\Support\Facades\Schema::hasColumn('request_items', 'approved_by')) {
+            $updates['approved_by'] = $request->user()->id;
+        }
+        if (\Illuminate\Support\Facades\Schema::hasColumn('request_items', 'approved_at')) {
+            $updates['approved_at'] = now();
+        }
+		$req->update($updates);
+
+		// Log approve action
+		ActivityService::logApprove($req, $request->user()->id, 'Request approved', $request);
 
         // Create a procurement placeholder asset so procurement can process purchase
         $assetController = new \App\Http\Controllers\AssetController();
@@ -205,17 +227,20 @@ class RequestItemController extends Controller
             'notes' => null,
         ]);
 
-        return response()->json(['message' => 'Request approved', 'request' => $req]);
+		return response()->json(['message' => 'Request approved', 'request' => $req]);
     }
 
     // GA: reject request
     public function reject(Request $request, $id)
     {
         $req = RequestItem::findOrFail($id);
-        $req->update([
+		$req->update([
             'status' => 'rejected',
             'ga_note' => $request->ga_note ?? null,
         ]);
+
+		// Log reject action
+		ActivityService::logReject($req, $request->user()->id, 'Request rejected', $request);
 
         return response()->json(['message' => 'Request rejected', 'request' => $req]);
     }
@@ -234,7 +259,11 @@ class RequestItemController extends Controller
             'ga_note' => 'nullable|string',
         ]);
 
-        $req->update($data);
+		$oldValues = $req->toArray();
+		$req->update($data);
+
+		// Log admin update
+		ActivityService::logUpdate($req, $request->user()->id, $oldValues, $request);
         return response()->json(['message' => 'Request updated', 'request' => $req]);
     }
 
@@ -243,7 +272,8 @@ class RequestItemController extends Controller
     {
         $req = RequestItem::with('assets')->findOrFail($id);
         // Force allow delete for any status; assets will be removed via FK cascade
-        $req->delete();
+		ActivityService::logDelete($req, request()->user()->id, request());
+		$req->delete();
         return response()->json(['message' => 'Request deleted']);
     }
 
@@ -254,7 +284,8 @@ class RequestItemController extends Controller
         if ($req->status !== 'pending') {
             return response()->json(['message' => 'Only pending requests can be deleted'], 422);
         }
-        $req->delete();
+		ActivityService::logDelete($req, $request->user()->id, $request);
+		$req->delete();
         return response()->json(['message' => 'Request deleted']);
     }
 
@@ -295,7 +326,7 @@ class RequestItemController extends Controller
             }
         }
 
-    \DB::transaction(function () use ($item, $data, $currentUser) {
+	\DB::transaction(function () use ($item, $data, $currentUser) {
             $item->update([
                 'maintenance_type' => $data['type'],
                 'maintenance_reason' => $data['reason'],
@@ -327,7 +358,19 @@ class RequestItemController extends Controller
             $item->save();
         });
 
-        return response()->json([
+		// Log maintenance request
+		ActivityService::log(
+			$currentUser->id,
+			'update',
+			"Requested maintenance for request #{$item->id}",
+			get_class($item),
+			$item->id,
+			null,
+			$item->toArray(),
+			request()
+		);
+
+		return response()->json([
             'message' => 'Maintenance request submitted',
             'request' => $item->fresh(['assets']),
         ]);
@@ -350,7 +393,7 @@ class RequestItemController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-    \DB::transaction(function () use ($item, $data, $currentUser) {
+	\DB::transaction(function () use ($item, $data, $currentUser) {
             $item->update([
                 'maintenance_status' => 'completed',
                 'maintenance_completed_by' => $currentUser->id,
@@ -370,7 +413,19 @@ class RequestItemController extends Controller
             $item->save();
         });
 
-        return response()->json([
+		// Log maintenance completion
+		ActivityService::log(
+			$currentUser->id,
+			'update',
+			"Completed maintenance for request #{$item->id}",
+			get_class($item),
+			$item->id,
+			null,
+			$item->toArray(),
+			request()
+		);
+
+		return response()->json([
             'message' => 'Maintenance marked as completed',
             'request' => $item->fresh(['assets']),
         ]);
@@ -389,7 +444,7 @@ class RequestItemController extends Controller
             return response()->json(['message' => 'No pending maintenance to start'], 422);
         }
 
-        \DB::transaction(function () use ($item, $currentUser) {
+		\DB::transaction(function () use ($item, $currentUser) {
             $item->update([
                 'maintenance_status' => 'in_progress',
                 'maintenance_started_by' => $currentUser->id,
@@ -404,7 +459,19 @@ class RequestItemController extends Controller
             }
         });
 
-        return response()->json([
+		// Log maintenance start
+		ActivityService::log(
+			$currentUser->id,
+			'update',
+			"Started maintenance for request #{$item->id}",
+			get_class($item),
+			$item->id,
+			null,
+			$item->toArray(),
+			request()
+		);
+
+		return response()->json([
             'message' => 'Maintenance started',
             'request' => $item->fresh(['assets']),
         ]);
@@ -428,12 +495,15 @@ class RequestItemController extends Controller
             'final_note' => 'nullable|string',
         ]);
 
-        $item->update([
+		$item->update([
             'status' => 'final_approved',
             'final_approved_by' => $currentUser->id,
             'final_approved_at' => now(),
             'final_note' => $data['final_note'] ?? null,
         ]);
+
+		// Log final approve
+		ActivityService::logApprove($item, $currentUser->id, 'Request final approved', $request);
 
         return response()->json([
             'message' => 'Request finally approved',
@@ -459,12 +529,15 @@ class RequestItemController extends Controller
             'final_rejection_reason' => 'required|string',
         ]);
 
-        $item->update([
+		$item->update([
             'status' => 'final_rejected',
             'final_rejected_by' => $currentUser->id,
             'final_rejected_at' => now(),
             'final_rejection_reason' => $data['final_rejection_reason'],
         ]);
+
+		// Log final reject
+		ActivityService::logReject($item, $currentUser->id, 'Request final rejected', $request);
 
         return response()->json([
             'message' => 'Request finally rejected',

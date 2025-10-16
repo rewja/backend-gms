@@ -22,6 +22,17 @@ class ActivityService
         ?array $newValues = null,
         ?Request $request = null
     ): ActivityLog {
+        // Debug trace to ensure logging path is executed
+        try {
+            \Log::info('ActivityService.log invoked', [
+                'user_id' => $userId,
+                'action' => $action,
+                'model_type' => $modelType,
+                'model_id' => $modelId,
+            ]);
+        } catch (\Throwable $e) {
+            // ignore logging errors
+        }
         $ipAddress = null;
         $userAgent = null;
 

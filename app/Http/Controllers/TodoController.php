@@ -9,6 +9,7 @@ use App\Http\Resources\TodoResource;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
+use App\Services\ActivityService;
 
 class TodoController extends Controller
 {
@@ -333,6 +334,7 @@ class TodoController extends Controller
             unset($data['target_user_id']);
             $data['status'] = 'not_started';
             $todo = Todo::create($data);
+            ActivityService::logCreate($todo, $request->user()->id, $request);
             
             return response()->json([
                 'message' => 'Todo created successfully',
@@ -392,6 +394,7 @@ class TodoController extends Controller
                                 // skip duplicate
                             } else {
                                 $todo = Todo::create($payload);
+                                ActivityService::logCreate($todo, $request->user()->id, $request);
                                 $createdTodos[] = new TodoResource($todo);
                                 $totalCreated++;
                             }
@@ -425,6 +428,7 @@ class TodoController extends Controller
                                     // skip duplicate
                                 } else {
                                     $todo = Todo::create($payload);
+                                    ActivityService::logCreate($todo, $request->user()->id, $request);
                                     $createdTodos[] = new TodoResource($todo);
                                     $totalCreated++;
                                 }
@@ -449,6 +453,7 @@ class TodoController extends Controller
                                 // skip duplicate
                             } else {
                                 $todo = Todo::create($payload);
+                                ActivityService::logCreate($todo, $request->user()->id, $request);
                                 $createdTodos[] = new TodoResource($todo);
                                 $totalCreated++;
                             }
@@ -471,6 +476,7 @@ class TodoController extends Controller
                                 // skip duplicate
                             } else {
                                 $todo = Todo::create($payload);
+                                ActivityService::logCreate($todo, $request->user()->id, $request);
                                 $createdTodos[] = new TodoResource($todo);
                                 $totalCreated++;
                             }
@@ -480,7 +486,8 @@ class TodoController extends Controller
                     }
                 } else {
                     // Non-routine: single todo per user
-                    $todo = Todo::create($base);
+            $todo = Todo::create($base);
+            ActivityService::logCreate($todo, $request->user()->id, $request);
                     $createdTodos[] = new TodoResource($todo);
                 }
             }
@@ -529,7 +536,9 @@ class TodoController extends Controller
             $todo->$key = $val;
         }
 
+        $oldValues = $todo->toArray();
         $todo->save();
+        ActivityService::logUpdate($todo, $request->user()->id, $oldValues, $request);
 
         return response()->json([
             'message' => 'Todo updated successfully',
@@ -574,7 +583,9 @@ class TodoController extends Controller
                 }
             }
 
+            $oldValues = $todo->getOriginal();
             $todo->save();
+            ActivityService::logUpdate($todo, $request->user()->id, $oldValues, $request);
 
             return response()->json([
                 'message' => 'Todo updated successfully',
@@ -699,10 +710,12 @@ class TodoController extends Controller
         }
 
         // Catat waktu mulai
+        $oldValues = $todo->toArray();
         $todo->update([
             'status' => 'in_progress',
             'started_at' => now()
         ]);
+        ActivityService::logUpdate($todo, $request->user()->id, $oldValues, $request);
 
         return response()->json([
             'message' => 'Todo started',
@@ -722,10 +735,12 @@ class TodoController extends Controller
             'hold_note' => 'required|string|max:500'
         ]);
 
+        $oldValues = $todo->toArray();
         $todo->update([
             'status' => 'hold',
             'hold_note' => $data['hold_note']
         ]);
+        ActivityService::logUpdate($todo, $request->user()->id, $oldValues, $request);
 
         return response()->json([
             'message' => 'Todo put on hold',
@@ -752,12 +767,14 @@ class TodoController extends Controller
             $totalMinutes = Carbon::parse($todo->started_at)->diffInMinutes(now());
         }
 
+        $oldValues = $todo->toArray();
         $todo->update([
             'status' => 'completed',
             'submitted_at' => now(),
             'total_work_time' => $totalMinutes,
             'total_work_time_formatted' => $this->formatDuration($totalMinutes)
         ]);
+        ActivityService::logUpdate($todo, $request->user()->id, $oldValues, $request);
 
         return response()->json([
             'message' => 'Todo completed successfully',
@@ -873,7 +890,11 @@ class TodoController extends Controller
                 $payload['total_work_time_formatted'] = $this->formatDuration($totalMinutes);
             }
 
+            $oldValues = $todo->toArray();
+            $oldValues = $todo->toArray();
             $todo->update($payload);
+            ActivityService::logUpdate($todo, $request->user()->id, $oldValues, $request);
+            ActivityService::logUpdate($todo, $request->user()->id, $oldValues, $request);
 
             return response()->json([
                 'message' => 'Todo submitted for checking',
@@ -941,6 +962,7 @@ class TodoController extends Controller
         // Determine next status based on action
         $nextStatus = $data['action'] === 'approve' ? 'completed' : 'evaluating';
 
+        $oldValues = $todo->toArray();
         $todo->update([
             'status' => $nextStatus,
             'notes' => $data['notes'] ?? $todo->notes,
@@ -950,6 +972,7 @@ class TodoController extends Controller
             'total_work_time_formatted' => $this->formatDuration($totalMinutes),
             'rating' => $automaticRating,
         ]);
+        ActivityService::logUpdate($todo, $request->user()->id, $oldValues, $request);
 
         // Automatic warning points based on rating
         if ($automaticRating !== null && $automaticRating < 60) {
@@ -1146,6 +1169,7 @@ class TodoController extends Controller
             $automaticRating = $this->calculateAutomaticRating($todo->total_work_time, $targetDuration);
         }
 
+        $oldValues = $todo->toArray();
         $todo->update([
             'status' => 'completed',
             'notes' => $data['notes'] ?? $todo->notes,
@@ -1153,6 +1177,7 @@ class TodoController extends Controller
             'checker_display' => $checkerDisplay,
             'rating' => $automaticRating,
         ]);
+        ActivityService::logApprove($todo, $request->user()->id, 'Todo approved', $request);
 
         return response()->json([
             'message' => 'Improvement approved and todo completed',
@@ -1336,6 +1361,8 @@ class TodoController extends Controller
             }
         }
 
+        ActivityService::logDelete($todo, $request->user()->id, $request);
+        ActivityService::logDelete($todo, $request->user()->id, $request);
         $todo->delete();
 
         return response()->json(['message' => 'Todo deleted successfully']);

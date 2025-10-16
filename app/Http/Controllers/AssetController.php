@@ -6,6 +6,7 @@ use App\Models\Asset;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\ActivityService;
 
 class AssetController extends Controller
 {
@@ -183,9 +184,12 @@ class AssetController extends Controller
             $data['status'] = 'not_received';
         }
 
-        $asset = Asset::create($data);
+		$asset = Asset::create($data);
 
-        return response()->json(['message' => 'Asset created successfully', 'asset' => $asset], 201);
+		// Log create
+		ActivityService::logCreate($asset, $request->user()->id, $request);
+
+		return response()->json(['message' => 'Asset created successfully', 'asset' => $asset], 201);
     }
 
     /**
@@ -225,7 +229,11 @@ class AssetController extends Controller
             'received_date' => 'nullable|date',
         ]);
 
-        $asset->update($data);
+		$oldValues = $asset->toArray();
+		$asset->update($data);
+
+		// Log update
+		ActivityService::logUpdate($asset, $request->user()->id, $oldValues, $request);
 
         return response()->json(['message' => 'Asset updated successfully', 'asset' => $asset]);
     }
@@ -243,7 +251,11 @@ class AssetController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        $asset->update($data);
+		$oldValues = $asset->toArray();
+		$asset->update($data);
+
+		// Log status update
+		ActivityService::logUpdate($asset, $request->user()->id, $oldValues, $request);
 
         return response()->json(['message' => 'Asset status updated', 'asset' => $asset]);
     }
@@ -253,8 +265,9 @@ class AssetController extends Controller
      */
     public function destroy($id)
     {
-        $asset = Asset::findOrFail($id);
-        $asset->delete();
+		$asset = Asset::findOrFail($id);
+		ActivityService::logDelete($asset, request()->user()->id, request());
+		$asset->delete();
 
         return response()->json(['message' => 'Asset deleted successfully']);
     }
@@ -403,7 +416,19 @@ class AssetController extends Controller
             ]);
         }
 
-        return response()->json([
+		// Log maintenance request
+		ActivityService::log(
+			$user->id,
+			'update',
+			"Requested maintenance for asset #{$asset->id}",
+			get_class($asset),
+			$asset->id,
+			null,
+			$asset->toArray(),
+			request()
+		);
+
+		return response()->json([
             'message' => 'Maintenance request submitted',
             'asset' => $asset->fresh(['request']),
         ]);
@@ -441,7 +466,19 @@ class AssetController extends Controller
             ]);
         }
 
-        return response()->json([
+		// Log maintenance completion
+		ActivityService::log(
+			$user->id,
+			'update',
+			"Completed maintenance for asset #{$asset->id}",
+			get_class($asset),
+			$asset->id,
+			null,
+			$asset->toArray(),
+			request()
+		);
+
+		return response()->json([
             'message' => 'Maintenance marked as completed',
             'asset' => $asset->fresh(['request']),
         ]);
@@ -482,7 +519,19 @@ class AssetController extends Controller
             ]);
         }
 
-        return response()->json([
+		// Log maintenance start
+		ActivityService::log(
+			$user->id,
+			'update',
+			"Started maintenance for asset #{$asset->id}",
+			get_class($asset),
+			$asset->id,
+			null,
+			$asset->toArray(),
+			request()
+		);
+
+		return response()->json([
             'message' => 'Maintenance started',
             'asset' => $asset->fresh(['request']),
         ]);
@@ -514,7 +563,10 @@ class AssetController extends Controller
             ]);
         }
 
-        return response()->json([
+		// Log maintenance approve
+		ActivityService::logApprove($asset, $user->id, 'Maintenance approved', $request);
+
+		return response()->json([
             'message' => 'Maintenance request approved',
             'asset' => $asset->fresh(['request']),
         ]);
@@ -543,7 +595,10 @@ class AssetController extends Controller
             ]);
         }
 
-        return response()->json([
+		// Log maintenance reject
+		ActivityService::logReject($asset, $user->id, 'Maintenance rejected', $request);
+
+		return response()->json([
             'message' => 'Maintenance request rejected',
             'asset' => $asset->fresh(['request']),
         ]);

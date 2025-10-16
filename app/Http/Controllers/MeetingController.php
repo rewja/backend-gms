@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Meeting;
 use Illuminate\Http\Request;
+use App\Services\ActivityService;
 
 class MeetingController extends Controller
 {
@@ -103,6 +104,11 @@ class MeetingController extends Controller
 
         $meeting = Meeting::create($data);
 
+        // Log create (authenticated booking)
+        if ($request->user()) {
+            ActivityService::logCreate($meeting, $request->user()->id, $request);
+        }
+
         return response()->json(['message' => 'Meeting booked', 'meeting' => $meeting], 201);
     }
 
@@ -141,8 +147,10 @@ class MeetingController extends Controller
             'start_time' => 'required|date|after_or_equal:now',
             'end_time' => 'required|date|after:start_time',
         ]);
-
+        $oldValues = $meeting->toArray();
         $meeting->update($data);
+
+        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
         return response()->json(['message' => 'Meeting updated', 'meeting' => $meeting]);
     }
 
@@ -150,7 +158,9 @@ class MeetingController extends Controller
     {
         $meeting = Meeting::findOrFail($id);
         $this->authorizeUser($request, $meeting);
+        $oldValues = $meeting->toArray();
         $meeting->update(['status' => 'ongoing']);
+        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
         return response()->json(['message' => 'Meeting started', 'meeting' => $meeting]);
     }
 
@@ -158,14 +168,18 @@ class MeetingController extends Controller
     {
         $meeting = Meeting::findOrFail($id);
         $this->authorizeUser($request, $meeting);
+        $oldValues = $meeting->toArray();
         $meeting->update(['status' => 'ended']);
+        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
         return response()->json(['message' => 'Meeting ended', 'meeting' => $meeting]);
     }
 
     public function forceEnd(Request $request, $id)
     {
         $meeting = Meeting::findOrFail($id);
+        $oldValues = $meeting->toArray();
         $meeting->update(['status' => 'force_ended']);
+        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
         return response()->json(['message' => 'Meeting force ended', 'meeting' => $meeting]);
     }
 
@@ -185,7 +199,7 @@ class MeetingController extends Controller
         // Note: route model binding provides $meeting
         // We will authorize using same rule as other actions
         request()->user()->role === 'admin_ga' ?: abort(response()->json(['message' => 'Unauthorized'], 403));
-
+        ActivityService::logDelete($meeting, request()->user()->id, request());
         $meeting->delete();
         return response()->json(['message' => 'Meeting deleted']);
     }

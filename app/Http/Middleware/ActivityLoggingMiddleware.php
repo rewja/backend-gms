@@ -68,7 +68,6 @@ class ActivityLoggingMiddleware
         $skipRoutes = [
             'activities.mine',
             'activities.index',
-            'activities.stats',
             'me',
         ];
 

@@ -65,54 +65,7 @@ class ActivityController extends Controller
         return response()->json($activities);
     }
 
-    /**
-     * Get activity statistics.
-     */
-    public function stats(Request $request)
-    {
-        $userId = $request->user()->id;
-        $isAdmin = in_array($request->user()->role, ['admin_ga', 'admin_ga_manager', 'super_admin']);
-
-        // Daily activities for the last 30 days
-        $daily = ActivityLog::where('user_id', $userId)
-            ->selectRaw('DATE(created_at) as date, COUNT(*) as total')
-            ->where('created_at', '>=', now()->subDays(30))
-            ->groupBy('date')
-            ->orderBy('date', 'desc')
-            ->get();
-
-        // Activities by action (user-specific)
-        $byAction = ActivityLog::where('user_id', $userId)
-            ->selectRaw('action, COUNT(*) as total')
-            ->groupBy('action')
-            ->orderBy('total', 'desc')
-            ->get();
-
-        // Activities by user (if admin)
-        $byUser = [];
-        if ($isAdmin) {
-            $byUser = ActivityLog::with('user')
-                ->selectRaw('user_id, COUNT(*) as total')
-                ->groupBy('user_id')
-                ->orderBy('total', 'desc')
-                ->limit(10)
-                ->get();
-        }
-
-        // Recent activities (user-specific)
-        $recent = ActivityLog::where('user_id', $userId)
-            ->with('user')
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get();
-
-        return response()->json([
-            'daily' => $daily,
-            'by_action' => $byAction,
-            'by_user' => $byUser,
-            'recent' => $recent,
-        ]);
-    }
+    
 
     /**
      * Get user activity summary.
