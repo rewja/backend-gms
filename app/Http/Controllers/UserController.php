@@ -3,9 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
-use App\Services\ActivityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 
 class UserController extends Controller
 {
@@ -28,23 +28,26 @@ class UserController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:100',
             'email' => 'required|email|unique:users',
-            'password' => 'required|string|min:6',
-            'role' => 'required|in:user,admin_ga,admin_ga_manager',
+            'password' => ['required', PasswordRule::min(8)->letters()->mixedCase()->numbers()],
+            'role' => 'required|in:user,admin_ga,admin_ga_manager,super_admin,procurement',
             'department' => 'nullable|string|max:100',
             'position' => 'nullable|string|max:100',
             'category' => 'nullable|in:ob,driver,security,magang_pkl',
         ]);
 
+        // Only privileged roles can assign elevated roles
+        $currentUser = $request->user();
+        $elevatedRoles = ['admin_ga', 'admin_ga_manager', 'super_admin'];
+        if (in_array($data['role'] ?? 'user', $elevatedRoles, true)) {
+            if (!$currentUser || !in_array($currentUser->role, $elevatedRoles, true)) {
+                return response()->json(['message' => 'Insufficient permissions to assign elevated role'], 403);
+            }
+        }
+
         $data['password'] = Hash::make($data['password']);
 
         $user = User::create($data);
 
-        // Log user creation activity
-        ActivityService::logCreate(
-            $user,
-            $request->user()->id,
-            $request
-        );
 
         return response()->json(['message' => 'User created successfully', 'user' => $user], 201);
     }
@@ -57,15 +60,28 @@ class UserController extends Controller
         $data = $request->validate([
             'name' => 'sometimes|string|max:100',
             'email' => 'sometimes|email|unique:users,email,' . $user->id,
-            'password' => 'nullable|string|min:6',
-            'role' => 'sometimes|in:user,admin_ga,admin_ga_manager',
+            'password' => ['nullable', PasswordRule::min(8)->letters()->mixedCase()->numbers()],
+            'role' => 'sometimes|in:user,admin_ga,admin_ga_manager,super_admin,procurement',
             'department' => 'nullable|string|max:100',
             'position' => 'nullable|string|max:100',
             'category' => 'nullable|in:ob,driver,security,magang_pkl',
         ]);
-
-        // Store old values for logging
-        $oldValues = $user->toArray();
+        
+        // Prevent self role changes and restrict role updates to privileged roles
+        if (array_key_exists('role', $data)) {
+            $currentUser = $request->user();
+            $elevatedRoles = ['admin_ga', 'admin_ga_manager', 'super_admin'];
+            if (!$currentUser) {
+                unset($data['role']);
+            } else {
+                if ($currentUser->id === $user->id) {
+                    return response()->json(['message' => 'Cannot change own role'], 403);
+                }
+                if (!in_array($currentUser->role, $elevatedRoles, true)) {
+                    return response()->json(['message' => 'Insufficient permissions to change role'], 403);
+                }
+            }
+        }
 
         if (!empty($data['password'])) {
             $data['password'] = Hash::make($data['password']);
@@ -75,13 +91,6 @@ class UserController extends Controller
 
         $user->update($data);
 
-        // Log user update activity
-        ActivityService::logUpdate(
-            $user,
-            $request->user()->id,
-            $oldValues,
-            $request
-        );
 
         return response()->json(['message' => 'User updated successfully', 'user' => $user]);
     }
@@ -91,15 +100,6 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
         
-        // Get current user from request (we need to access it differently)
-        $currentUser = request()->user();
-        
-        // Log user deletion activity before deleting
-        ActivityService::logDelete(
-            $user,
-            $currentUser->id,
-            request()
-        );
         
         $user->delete();
 

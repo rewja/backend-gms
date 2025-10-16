@@ -20,8 +20,8 @@ use Illuminate\Http\Request;
 
 // ---------------- AUTH ----------------
 Route::prefix('auth')->group(function () {
-    Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
+    Route::post('/logout', [AuthController::class, 'logout'])->middleware(['auth:sanctum', 'throttle:60,1']);
 });
 
 // ---------------- USERS (managed by admin) ----------------
@@ -38,20 +38,6 @@ Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin']
 // ---------------- USER PROFILE (self access) ----------------
 Route::middleware('auth:sanctum')->get('/me', [UserController::class, 'me']);
 
-// ---------------- ACTIVITY LOGS ----------------
-// User: view own activities
-Route::middleware(['auth:sanctum', 'role:user'])->prefix('activities')->group(function () {
-    Route::get('/mine', [ActivityController::class, 'mine']);
-    Route::get('/stats', [ActivityController::class, 'stats']);
-});
-
-// Admin GA and GA Manager: view all activities (can see all user activities)
-Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin'])->prefix('activities')->group(function () {
-    Route::get('/', [ActivityController::class, 'index']);
-    Route::get('/stats', [ActivityController::class, 'stats']);
-    Route::get('/user/{userId}', [ActivityController::class, 'userSummary']);
-    Route::delete('/clear-old', [ActivityController::class, 'clearOld']);
-});
 
 // ---------------- TODOS ----------------
 // User: manage own todos
@@ -183,7 +169,8 @@ Route::middleware(['auth:sanctum', 'role:procurement,admin_ga,admin_ga_manager,s
 });
 
 // User: manage own assets
-Route::middleware(['auth:sanctum', 'role:user'])->prefix('assets')->group(function () {
+// Allow any authenticated user to view their own assets (role filtering is handled in controller by ownership)
+Route::middleware(['auth:sanctum'])->prefix('assets')->group(function () {
     Route::get('/mine', [AssetController::class, 'mine']);
 });
 
@@ -252,6 +239,23 @@ Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin']
     Route::delete('/{id}', [VisitorController::class, 'destroy']);
     Route::post('/{id}/check-in', [VisitorController::class, 'checkIn']);
     Route::post('/{id}/check-out', [VisitorController::class, 'checkOut']);
+});
+
+// ---------------- ACTIVITY LOGS / HISTORY ----------------
+// User: view own activity logs
+Route::middleware(['auth:sanctum'])->prefix('activities')->group(function () {
+    Route::get('/mine', [ActivityController::class, 'mine']);                    // Personal activity logs
+    Route::get('/stats', [ActivityController::class, 'stats']);                  // Personal activity statistics
+    Route::get('/export', [ActivityController::class, 'export']);                // Export personal activity logs
+    Route::get('/user/{userId}/summary', [ActivityController::class, 'userSummary']); // User activity summary (if authorized)
+});
+
+// Admin: manage all activity logs
+Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin'])->prefix('activities')->group(function () {
+    Route::get('/', [ActivityController::class, 'index']);                       // All activity logs with filters
+    Route::get('/stats', [ActivityController::class, 'stats']);                  // System-wide activity statistics
+    Route::get('/export', [ActivityController::class, 'export']);                // Export all activity logs
+    Route::post('/clear-old', [ActivityController::class, 'clearOld']);          // Clear old activity logs
 });
 
 // (Debug routes removed)

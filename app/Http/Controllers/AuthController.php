@@ -17,13 +17,15 @@ class AuthController extends Controller
         ]);
 
         if (!Auth::attempt($credentials)) {
+            // Log failed login attempt
+            ActivityService::logFailedLogin($request->email, $request);
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
         $user = Auth::user();
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        // Log login activity
+        // Log successful login
         ActivityService::logLogin($user, $request);
 
         return response()->json([

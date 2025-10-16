@@ -22,23 +22,16 @@ class ActivityService
         ?array $newValues = null,
         ?Request $request = null
     ): ActivityLog {
-        // Debug trace to ensure logging path is executed
-        try {
-            \Log::info('ActivityService.log invoked', [
-                'user_id' => $userId,
-                'action' => $action,
-                'model_type' => $modelType,
-                'model_id' => $modelId,
-            ]);
-        } catch (\Throwable $e) {
-            // ignore logging errors
-        }
         $ipAddress = null;
         $userAgent = null;
+        $routeName = null;
+        $method = null;
 
         if ($request) {
             $ipAddress = $request->ip();
             $userAgent = $request->userAgent();
+            $routeName = $request->route()?->getName();
+            $method = $request->method();
         }
 
         return ActivityLog::create([
@@ -51,6 +44,8 @@ class ActivityService
             'new_values' => $newValues,
             'ip_address' => $ipAddress,
             'user_agent' => $userAgent,
+            'route_name' => $routeName,
+            'method' => $method,
         ]);
     }
 
@@ -59,10 +54,13 @@ class ActivityService
      */
     public static function logCreate(Model $model, int $userId, ?Request $request = null): ActivityLog
     {
+        $modelName = class_basename($model);
+        $description = "Created {$modelName} #{$model->id}";
+
         return self::log(
             $userId,
             'create',
-            "Created {$model->getTable()} #{$model->id}",
+            $description,
             get_class($model),
             $model->id,
             null,
@@ -76,10 +74,13 @@ class ActivityService
      */
     public static function logUpdate(Model $model, int $userId, array $oldValues, ?Request $request = null): ActivityLog
     {
+        $modelName = class_basename($model);
+        $description = "Updated {$modelName} #{$model->id}";
+
         return self::log(
             $userId,
             'update',
-            "Updated {$model->getTable()} #{$model->id}",
+            $description,
             get_class($model),
             $model->id,
             $oldValues,
@@ -93,10 +94,13 @@ class ActivityService
      */
     public static function logDelete(Model $model, int $userId, ?Request $request = null): ActivityLog
     {
+        $modelName = class_basename($model);
+        $description = "Deleted {$modelName} #{$model->id}";
+
         return self::log(
             $userId,
             'delete',
-            "Deleted {$model->getTable()} #{$model->id}",
+            $description,
             get_class($model),
             $model->id,
             $model->toArray(),
@@ -113,7 +117,7 @@ class ActivityService
         return self::log(
             $user->id,
             'login',
-            "User logged in",
+            "User {$user->name} logged in",
             null,
             null,
             null,
@@ -130,7 +134,7 @@ class ActivityService
         return self::log(
             $user->id,
             'logout',
-            "User logged out",
+            "User {$user->name} logged out",
             null,
             null,
             null,
@@ -140,36 +144,110 @@ class ActivityService
     }
 
     /**
-     * Log approval action.
+     * Log failed login attempt.
      */
-    public static function logApprove(Model $model, int $userId, string $description, ?Request $request = null): ActivityLog
+    public static function logFailedLogin(string $email, ?Request $request = null): ActivityLog
+    {
+        $ipAddress = $request ? $request->ip() : null;
+        $userAgent = $request ? $request->userAgent() : null;
+
+        return ActivityLog::create([
+            'user_id' => null, // No user for failed login
+            'action' => 'failed_login',
+            'description' => "Failed login attempt for email: {$email}",
+            'ip_address' => $ipAddress,
+            'user_agent' => $userAgent,
+            'route_name' => $request?->route()?->getName(),
+            'method' => $request?->method(),
+        ]);
+    }
+
+    /**
+     * Log data export.
+     */
+    public static function logExport(int $userId, string $exportType, ?Request $request = null): ActivityLog
     {
         return self::log(
             $userId,
-            'approve',
-            $description,
-            get_class($model),
-            $model->id,
+            'export',
+            "Exported {$exportType} data",
             null,
-            $model->toArray(),
+            null,
+            null,
+            null,
             $request
         );
     }
 
     /**
-     * Log rejection action.
+     * Log data import.
      */
-    public static function logReject(Model $model, int $userId, string $description, ?Request $request = null): ActivityLog
+    public static function logImport(int $userId, string $importType, int $recordCount, ?Request $request = null): ActivityLog
     {
         return self::log(
             $userId,
-            'reject',
-            $description,
-            get_class($model),
-            $model->id,
+            'import',
+            "Imported {$recordCount} {$importType} records",
             null,
-            $model->toArray(),
+            null,
+            null,
+            null,
             $request
         );
+    }
+
+    /**
+     * Get activity statistics for a user.
+     */
+    public static function getUserStats(int $userId, int $days = 30): array
+    {
+        $startDate = now()->subDays($days);
+
+        $stats = ActivityLog::where('user_id', $userId)
+            ->where('created_at', '>=', $startDate)
+            ->selectRaw('
+                COUNT(*) as total_activities,
+                COUNT(CASE WHEN action = "create" THEN 1 END) as creates,
+                COUNT(CASE WHEN action = "update" THEN 1 END) as updates,
+                COUNT(CASE WHEN action = "delete" THEN 1 END) as deletes,
+                COUNT(CASE WHEN action = "login" THEN 1 END) as logins,
+                COUNT(CASE WHEN action = "export" THEN 1 END) as exports
+            ')
+            ->first();
+
+        return [
+            'total_activities' => $stats->total_activities ?? 0,
+            'creates' => $stats->creates ?? 0,
+            'updates' => $stats->updates ?? 0,
+            'deletes' => $stats->deletes ?? 0,
+            'logins' => $stats->logins ?? 0,
+            'exports' => $stats->exports ?? 0,
+        ];
+    }
+
+    /**
+     * Get system-wide activity statistics (admin only).
+     */
+    public static function getSystemStats(int $days = 30): array
+    {
+        $startDate = now()->subDays($days);
+
+        $stats = ActivityLog::where('created_at', '>=', $startDate)
+            ->selectRaw('
+                COUNT(*) as total_activities,
+                COUNT(DISTINCT user_id) as active_users,
+                COUNT(CASE WHEN action = "login" THEN 1 END) as total_logins,
+                COUNT(CASE WHEN action = "failed_login" THEN 1 END) as failed_logins
+            ')
+            ->first();
+
+        return [
+            'total_activities' => $stats->total_activities ?? 0,
+            'active_users' => $stats->active_users ?? 0,
+            'total_logins' => $stats->total_logins ?? 0,
+            'failed_logins' => $stats->failed_logins ?? 0,
+        ];
     }
 }
+
+

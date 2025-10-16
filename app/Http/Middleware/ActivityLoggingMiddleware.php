@@ -6,17 +6,14 @@ use Closure;
 use Illuminate\Http\Request;
 use App\Services\ActivityService;
 use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\Response;
 
 class ActivityLoggingMiddleware
 {
     /**
      * Handle an incoming request.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \Closure(\Illuminate\Http\Request): (\Illuminate\Http\Response|\Illuminate\Http\RedirectResponse)  $next
-     * @return \Illuminate\Http\Response|\Illuminate\Http\RedirectResponse
      */
-    public function handle(Request $request, Closure $next)
+    public function handle(Request $request, Closure $next): Response
     {
         $response = $next($request);
 
@@ -63,49 +60,81 @@ class ActivityLoggingMiddleware
     /**
      * Determine if we should skip logging for this route.
      */
-    private function shouldSkipLogging($routeName, $method)
+    private function shouldSkipLogging(?string $routeName, string $method): bool
     {
+        // Skip logging for these routes
         $skipRoutes = [
-            'activities.mine',
-            'activities.index',
-            'me',
+            'api.activities.index',
+            'api.activities.mine',
+            'api.activities.stats',
+            'api.activities.export',
         ];
 
-        return in_array($routeName, $skipRoutes) || $method === 'GET';
+        // Skip GET requests to certain routes
+        $skipGetRoutes = [
+            'api.activities',
+            'api.dashboard',
+            'api.profile',
+        ];
+
+        if (in_array($routeName, $skipRoutes)) {
+            return true;
+        }
+
+        if ($method === 'GET' && in_array($routeName, $skipGetRoutes)) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
      * Determine the action based on HTTP method and route.
      */
-    private function determineAction($method, $routeName)
+    private function determineAction(string $method, ?string $routeName): ?string
     {
-        switch ($method) {
-            case 'POST':
-                if (str_contains($routeName, 'approve')) return 'approve';
-                if (str_contains($routeName, 'reject')) return 'reject';
-                return 'create';
-            case 'PUT':
-            case 'PATCH':
-                return 'update';
-            case 'DELETE':
-                return 'delete';
-            default:
-                return null;
+        // Map HTTP methods to actions
+        $methodActions = [
+            'POST' => 'create',
+            'PUT' => 'update',
+            'PATCH' => 'update',
+            'DELETE' => 'delete',
+        ];
+
+        // Special cases for specific routes
+        if ($routeName) {
+            if (str_contains($routeName, 'login')) {
+                return 'login';
+            }
+            if (str_contains($routeName, 'logout')) {
+                return 'logout';
+            }
+            if (str_contains($routeName, 'export')) {
+                return 'export';
+            }
+            if (str_contains($routeName, 'import')) {
+                return 'import';
+            }
         }
+
+        return $methodActions[$method] ?? null;
     }
 
     /**
      * Generate a human-readable description for the activity.
      */
-    private function generateDescription($method, $routeName, Request $request)
+    private function generateDescription(string $method, ?string $routeName, Request $request): ?string
     {
         if (!$routeName) {
-            return "Performed {$method} request";
+            return null;
         }
 
-        $resource = $this->extractResource($routeName);
+        // Extract resource name from route
+        $resource = $this->extractResourceName($routeName);
+        
+        // Generate description based on action
         $action = $this->determineAction($method, $routeName);
-
+        
         switch ($action) {
             case 'create':
                 return "Created new {$resource}";
@@ -113,34 +142,33 @@ class ActivityLoggingMiddleware
                 return "Updated {$resource}";
             case 'delete':
                 return "Deleted {$resource}";
-            case 'approve':
-                return "Approved {$resource}";
-            case 'reject':
-                return "Rejected {$resource}";
+            case 'export':
+                return "Exported {$resource} data";
+            case 'import':
+                return "Imported {$resource} data";
             default:
-                return "Performed action on {$resource}";
+                return "Accessed {$resource}";
         }
     }
 
     /**
      * Extract resource name from route name.
      */
-    private function extractResource($routeName)
+    private function extractResourceName(string $routeName): string
     {
-        $parts = explode('.', $routeName);
-        $resource = $parts[0] ?? 'item';
+        // Remove common prefixes
+        $routeName = str_replace(['api.', 'admin.'], '', $routeName);
         
-        // Map route names to friendly resource names
-        $resourceMap = [
-            'users' => 'user',
-            'todos' => 'todo',
-            'requests' => 'request',
-            'assets' => 'asset',
-            'meetings' => 'meeting',
-            'visitors' => 'visitor',
-            'procurements' => 'procurement',
-        ];
-
-        return $resourceMap[$resource] ?? $resource;
+        // Extract the main resource
+        $parts = explode('.', $routeName);
+        $resource = $parts[0] ?? 'resource';
+        
+        // Convert to human readable
+        $resource = str_replace('_', ' ', $resource);
+        $resource = ucwords($resource);
+        
+        return $resource;
     }
 }
+
+

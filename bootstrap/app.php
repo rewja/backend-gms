@@ -16,10 +16,6 @@ return Application::configure(basePath: dirname(__DIR__))
         'role' => \App\Http\Middleware\RoleMiddleware::class,
     ]);
 
-        // Ensure activity logging runs for all API requests
-        $middleware->appendToGroup('api', [
-            \App\Http\Middleware\ActivityLoggingMiddleware::class,
-        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         

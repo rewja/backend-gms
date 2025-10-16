@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\RequestItem;
 use Illuminate\Http\Request;
-use App\Services\ActivityService;
 
 class RequestItemController extends Controller
 {
@@ -40,8 +39,6 @@ class RequestItemController extends Controller
 
 		$req = RequestItem::create($data);
 
-		// Log create
-		ActivityService::logCreate($req, $request->user()->id, $request);
 
 		return response()->json(['message' => 'Request created successfully', 'request' => $req], 201);
     }
@@ -65,8 +62,6 @@ class RequestItemController extends Controller
 		$oldValues = $req->toArray();
 		$req->update($data);
 
-		// Log update
-		ActivityService::logUpdate($req, $request->user()->id, $oldValues, $request);
         return response()->json(['message' => 'Request updated', 'request' => $req]);
     }
 
@@ -206,8 +201,6 @@ class RequestItemController extends Controller
         }
 		$req->update($updates);
 
-		// Log approve action
-		ActivityService::logApprove($req, $request->user()->id, 'Request approved', $request);
 
         // Create a procurement placeholder asset so procurement can process purchase
         $assetController = new \App\Http\Controllers\AssetController();
@@ -239,8 +232,6 @@ class RequestItemController extends Controller
             'ga_note' => $request->ga_note ?? null,
         ]);
 
-		// Log reject action
-		ActivityService::logReject($req, $request->user()->id, 'Request rejected', $request);
 
         return response()->json(['message' => 'Request rejected', 'request' => $req]);
     }
@@ -262,8 +253,6 @@ class RequestItemController extends Controller
 		$oldValues = $req->toArray();
 		$req->update($data);
 
-		// Log admin update
-		ActivityService::logUpdate($req, $request->user()->id, $oldValues, $request);
         return response()->json(['message' => 'Request updated', 'request' => $req]);
     }
 
@@ -272,7 +261,6 @@ class RequestItemController extends Controller
     {
         $req = RequestItem::with('assets')->findOrFail($id);
         // Force allow delete for any status; assets will be removed via FK cascade
-		ActivityService::logDelete($req, request()->user()->id, request());
 		$req->delete();
         return response()->json(['message' => 'Request deleted']);
     }
@@ -284,7 +272,6 @@ class RequestItemController extends Controller
         if ($req->status !== 'pending') {
             return response()->json(['message' => 'Only pending requests can be deleted'], 422);
         }
-		ActivityService::logDelete($req, $request->user()->id, $request);
 		$req->delete();
         return response()->json(['message' => 'Request deleted']);
     }
@@ -358,17 +345,6 @@ class RequestItemController extends Controller
             $item->save();
         });
 
-		// Log maintenance request
-		ActivityService::log(
-			$currentUser->id,
-			'update',
-			"Requested maintenance for request #{$item->id}",
-			get_class($item),
-			$item->id,
-			null,
-			$item->toArray(),
-			request()
-		);
 
 		return response()->json([
             'message' => 'Maintenance request submitted',
@@ -413,17 +389,6 @@ class RequestItemController extends Controller
             $item->save();
         });
 
-		// Log maintenance completion
-		ActivityService::log(
-			$currentUser->id,
-			'update',
-			"Completed maintenance for request #{$item->id}",
-			get_class($item),
-			$item->id,
-			null,
-			$item->toArray(),
-			request()
-		);
 
 		return response()->json([
             'message' => 'Maintenance marked as completed',
@@ -459,17 +424,6 @@ class RequestItemController extends Controller
             }
         });
 
-		// Log maintenance start
-		ActivityService::log(
-			$currentUser->id,
-			'update',
-			"Started maintenance for request #{$item->id}",
-			get_class($item),
-			$item->id,
-			null,
-			$item->toArray(),
-			request()
-		);
 
 		return response()->json([
             'message' => 'Maintenance started',
@@ -502,8 +456,6 @@ class RequestItemController extends Controller
             'final_note' => $data['final_note'] ?? null,
         ]);
 
-		// Log final approve
-		ActivityService::logApprove($item, $currentUser->id, 'Request final approved', $request);
 
         return response()->json([
             'message' => 'Request finally approved',
@@ -536,8 +488,6 @@ class RequestItemController extends Controller
             'final_rejection_reason' => $data['final_rejection_reason'],
         ]);
 
-		// Log final reject
-		ActivityService::logReject($item, $currentUser->id, 'Request final rejected', $request);
 
         return response()->json([
             'message' => 'Request finally rejected',
