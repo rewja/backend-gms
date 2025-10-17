@@ -78,6 +78,7 @@ class TodoResource extends JsonResource
             'description' => $this->description,
             'priority' => $this->priority,
             'status' => $this->status,
+            'hold_note' => $this->hold_note,
             'todo_type' => $this->todo_type,
             'target_category' => $this->target_category,
             'checked_by' => $checkerDisplay,

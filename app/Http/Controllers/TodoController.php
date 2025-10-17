@@ -757,6 +757,9 @@ class TodoController extends Controller
             'started_at' => now()
         ]);
 
+        // Log activity: start todo
+        ActivityService::logTodoStart($todo->fresh(), $request->user()->id, $request);
+
         return response()->json([
             'message' => 'Todo started',
             'todo' => new TodoResource($todo)
@@ -780,6 +783,9 @@ class TodoController extends Controller
             'status' => 'hold',
             'hold_note' => $data['hold_note']
         ]);
+
+        // Log activity: hold todo
+        ActivityService::logTodoHold($todo->fresh(), $request->user()->id, $request);
 
         return response()->json([
             'message' => 'Todo put on hold',
@@ -813,6 +819,9 @@ class TodoController extends Controller
             'total_work_time' => $totalMinutes,
             'total_work_time_formatted' => $this->formatDuration($totalMinutes)
         ]);
+
+        // Log activity: complete todo
+        ActivityService::logTodoComplete($todo->fresh(), $request->user()->id, $request);
 
         return response()->json([
             'message' => 'Todo completed successfully',

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ActivityLog;
 use App\Models\User;
+use App\Models\Todo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -75,6 +76,51 @@ class ActivityService
             null,
             null,
             $summary,
+            $request
+        );
+    }
+
+    /**
+     * Log todo status transitions and actions.
+     */
+    public static function logTodoStart(Todo $todo, int $userId, ?Request $request = null): ActivityLog
+    {
+        return self::log(
+            $userId,
+            'start_todo',
+            "Started Todo #{$todo->id} ({$todo->title})",
+            get_class($todo),
+            $todo->id,
+            null,
+            ['status' => $todo->status, 'started_at' => $todo->started_at],
+            $request
+        );
+    }
+
+    public static function logTodoHold(Todo $todo, int $userId, ?Request $request = null): ActivityLog
+    {
+        return self::log(
+            $userId,
+            'hold_todo',
+            "Put On Hold Todo #{$todo->id} ({$todo->title})",
+            get_class($todo),
+            $todo->id,
+            null,
+            ['status' => $todo->status, 'hold_note' => $todo->hold_note],
+            $request
+        );
+    }
+
+    public static function logTodoComplete(Todo $todo, int $userId, ?Request $request = null): ActivityLog
+    {
+        return self::log(
+            $userId,
+            'complete_todo',
+            "Completed Todo #{$todo->id} ({$todo->title})",
+            get_class($todo),
+            $todo->id,
+            null,
+            ['status' => $todo->status, 'submitted_at' => $todo->submitted_at],
             $request
         );
     }

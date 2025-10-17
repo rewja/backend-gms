@@ -22,6 +22,11 @@ class ActivityController extends Controller
             ->where('user_id', $userId)
             ->orderBy('created_at', 'desc');
 
+        // Default: hide login/logout unless explicitly requested
+        if (!$request->has('include_auth') || !$request->boolean('include_auth')) {
+            $query->whereNotIn('action', ['login', 'logout']);
+        }
+
         // Apply filters
         $this->applyFilters($query, $request);
 
@@ -40,6 +45,11 @@ class ActivityController extends Controller
     public function index(Request $request)
     {
         $query = ActivityLog::with('user');
+
+        // Default: hide login/logout unless explicitly requested
+        if (!$request->has('include_auth') || !$request->boolean('include_auth')) {
+            $query->whereNotIn('action', ['login', 'logout']);
+        }
 
         // Apply filters
         $this->applyFilters($query, $request);
