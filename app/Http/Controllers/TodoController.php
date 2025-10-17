@@ -360,6 +360,10 @@ class TodoController extends Controller
             }
 
             $createdTodos = [];
+            $routineOccurrenceTotal = 0; // total occurrences created across users (routine only)
+            $routineTouchedUsers = 0; // number of users that got at least one routine occurrence
+            $routineSampleIds = [];
+            $routineDates = [];
 
             // Recurrence handling for rutin todos
             $isRoutine = ($data['todo_type'] ?? null) === 'rutin';
@@ -398,6 +402,9 @@ class TodoController extends Controller
                                 $todo = Todo::create($payload);
                                 $createdTodos[] = new TodoResource($todo);
                                 $totalCreated++;
+                                $routineOccurrenceTotal++;
+                                $routineDates[] = $payload['scheduled_date'];
+                                if (count($routineSampleIds) < 5) { $routineSampleIds[] = $todo->id; }
                             }
                             if ($repeatCount > 0 && $totalCreated >= $repeatCount) break;
                             $cursor->addDays($interval);
@@ -431,6 +438,9 @@ class TodoController extends Controller
                                     $todo = Todo::create($payload);
                                     $createdTodos[] = new TodoResource($todo);
                                     $totalCreated++;
+                                    $routineOccurrenceTotal++;
+                                    $routineDates[] = $payload['scheduled_date'];
+                                    if (count($routineSampleIds) < 5) { $routineSampleIds[] = $todo->id; }
                                 }
                                 if ($repeatCount > 0 && $totalCreated >= $repeatCount) break 2;
                             }
@@ -455,6 +465,9 @@ class TodoController extends Controller
                                 $todo = Todo::create($payload);
                                 $createdTodos[] = new TodoResource($todo);
                                 $totalCreated++;
+                                $routineOccurrenceTotal++;
+                                $routineDates[] = $payload['scheduled_date'];
+                                if (count($routineSampleIds) < 5) { $routineSampleIds[] = $todo->id; }
                             }
                             if ($repeatCount > 0 && $totalCreated >= $repeatCount) break;
                             $cursor->addMonths($interval);
@@ -477,16 +490,46 @@ class TodoController extends Controller
                                 $todo = Todo::create($payload);
                                 $createdTodos[] = new TodoResource($todo);
                                 $totalCreated++;
+                                $routineOccurrenceTotal++;
+                                $routineDates[] = $payload['scheduled_date'];
+                                if (count($routineSampleIds) < 5) { $routineSampleIds[] = $todo->id; }
                             }
                             if ($repeatCount > 0 && $totalCreated >= $repeatCount) break;
                             $cursor->addYears($interval);
                         }
                     }
+                    if ($totalCreated > 0) { $routineTouchedUsers++; }
                 } else {
                     // Non-routine: single todo per user
-            $todo = Todo::create($base);
+                    $todo = Todo::create($base);
+                    // Log activity for each created todo
+                    ActivityService::logCreate($todo, $request->user()->id, $request);
                     $createdTodos[] = new TodoResource($todo);
                 }
+            }
+
+            // Log aggregate for routine batch once
+            if ($isRoutine) {
+                $summary = [
+                    'todo_type' => 'rutin',
+                    'title' => $data['title'] ?? '',
+                    'recurrence_interval' => $interval,
+                    'recurrence_unit' => $unit,
+                    'recurrence_start_date' => $data['recurrence_start_date'] ?? null,
+                    'days_of_week' => $daysOfWeek,
+                    'target_category' => $data['target_category'] ?? 'all',
+                    'user_count' => $routineTouchedUsers,
+                    'occurrence_count' => $routineOccurrenceTotal,
+                    'sample_ids' => $routineSampleIds,
+                ];
+                if (!empty($routineDates)) {
+                    sort($routineDates);
+                    $summary['created_range'] = [
+                        'from' => $routineDates[0],
+                        'to' => $routineDates[count($routineDates)-1],
+                    ];
+                }
+                ActivityService::logCreateRoutineBatch($request->user()->id, $summary, $request);
             }
 
             return response()->json([

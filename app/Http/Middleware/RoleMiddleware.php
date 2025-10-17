@@ -19,8 +19,9 @@ class RoleMiddleware
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
-        // Admin bypass
-        if ($user->role === 'admin_ga') {
+        // Admin bypass - allow all admin roles
+        $adminRoles = ['admin_ga', 'admin_ga_manager', 'super_admin'];
+        if (in_array($user->role, $adminRoles, true)) {
             return $next($request);
         }
 

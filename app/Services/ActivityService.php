@@ -50,6 +50,36 @@ class ActivityService
     }
 
     /**
+     * Log aggregate creation for routine todos (single entry per batch).
+     */
+    public static function logCreateRoutineBatch(int $userId, array $summary, ?Request $request = null): ActivityLog
+    {
+        $title = $summary['title'] ?? '-';
+        $interval = $summary['recurrence_interval'] ?? 1;
+        $unit = $summary['recurrence_unit'] ?? 'day';
+        $userCount = $summary['user_count'] ?? null;
+        $occurrenceCount = $summary['occurrence_count'] ?? null;
+
+        $parts = [];
+        $parts[] = "Created Routine '{$title}'";
+        $parts[] = "({$interval} {$unit})";
+        if ($userCount !== null) $parts[] = "for {$userCount} user(s)";
+        if ($occurrenceCount !== null) $parts[] = "{$occurrenceCount} occurrence(s)";
+        $description = implode(' ', $parts);
+
+        return self::log(
+            $userId,
+            'create_routine_batch',
+            $description,
+            null,
+            null,
+            null,
+            $summary,
+            $request
+        );
+    }
+
+    /**
      * Log model creation.
      */
     public static function logCreate(Model $model, int $userId, ?Request $request = null): ActivityLog
@@ -249,5 +279,9 @@ class ActivityService
         ];
     }
 }
+
+
+
+
 
 
