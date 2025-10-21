@@ -74,15 +74,18 @@ class TodoResource extends JsonResource
                     $scheme = $m[1];
                     $host = $m[2];
                     $path = $m[3];
-                    // encode each segment except already-encoded
-                    $segments = array_map(function ($s) {
-                        return rawurlencode(rawurldecode($s));
-                    }, explode('/', ltrim($path, '/')));
-                    $encodedPath = '/' . implode('/', $segments);
+                    // encode each segment properly for file names with spaces and special characters
+                    $segments = explode('/', ltrim($path, '/'));
+                    $encodedSegments = array_map(function ($segment) {
+                        // Decode first to avoid double encoding, then encode properly
+                        $decoded = rawurldecode($segment);
+                        return rawurlencode($decoded);
+                    }, $segments);
+                    $encodedPath = '/' . implode('/', $encodedSegments);
                     return $scheme . '://' . $host . $encodedPath;
                 }, $absoluteUrl) ?? $absoluteUrl;
             } catch (\Throwable $_) {
-                // best effort only
+                // best effort only - replace spaces with %20
                 $absoluteUrl = str_replace(' ', '%20', $absoluteUrl);
             }
 
