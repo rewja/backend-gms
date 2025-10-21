@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Meeting;
+use App\Services\ActivityService;
 use Illuminate\Http\Request;
 
 class MeetingController extends Controller
@@ -103,6 +104,8 @@ class MeetingController extends Controller
 
         $meeting = Meeting::create($data);
 
+        // Log activity: create meeting
+        ActivityService::logCreate($meeting, $request->user()->id, $request);
 
         return response()->json(['message' => 'Meeting booked', 'meeting' => $meeting], 201);
     }

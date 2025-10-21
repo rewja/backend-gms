@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\RequestItem;
+use App\Services\ActivityService;
 use Illuminate\Http\Request;
 
 class RequestItemController extends Controller
@@ -39,6 +40,8 @@ class RequestItemController extends Controller
 
 		$req = RequestItem::create($data);
 
+        // Log activity: create request
+        ActivityService::logCreate($req, $request->user()->id, $request);
 
 		return response()->json(['message' => 'Request created successfully', 'request' => $req], 201);
     }
@@ -61,6 +64,9 @@ class RequestItemController extends Controller
 
 		$oldValues = $req->toArray();
 		$req->update($data);
+
+        // Log activity: update request
+        ActivityService::logUpdate($req, $request->user()->id, $oldValues, $request);
 
         return response()->json(['message' => 'Request updated', 'request' => $req]);
     }
@@ -272,6 +278,10 @@ class RequestItemController extends Controller
         if ($req->status !== 'pending') {
             return response()->json(['message' => 'Only pending requests can be deleted'], 422);
         }
+
+        // Log activity before deletion
+        ActivityService::logDelete($req, $request->user()->id, $request);
+
 		$req->delete();
         return response()->json(['message' => 'Request deleted']);
     }

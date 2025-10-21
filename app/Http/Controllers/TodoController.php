@@ -1040,6 +1040,18 @@ class TodoController extends Controller
             ? 'Todo approved and completed' 
             : 'Todo marked for rework';
 
+        // Log activity: evaluate todo
+        ActivityService::log(
+            $request->user()->id,
+            'evaluate',
+            "Evaluated Todo #{$todo->id} ({$todo->title}) - {$data['action']}",
+            'App\\Models\\Todo',
+            $todo->id,
+            $oldValues,
+            $todo->fresh()->toArray(),
+            $request
+        );
+
         return response()->json([
             'message' => $message,
             'todo' => new TodoResource($todo)
@@ -1429,6 +1441,18 @@ class TodoController extends Controller
                 $todo->save();
             }
         }
+
+        // Log activity before deletion
+        ActivityService::log(
+            $request->user()->id,
+            'delete',
+            "Deleted Todo #{$todo->id} ({$todo->title})",
+            'App\\Models\\Todo',
+            $todo->id,
+            $todo->toArray(),
+            null,
+            $request
+        );
 
         $todo->delete();
 

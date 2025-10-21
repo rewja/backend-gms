@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Asset;
+use App\Services\ActivityService;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -328,7 +329,12 @@ class AssetController extends Controller
             $updateData['repair_proof_path'] = $path;
         }
 
+        // Log activity before update
+        $oldValues = $asset->toArray();
         $asset->update($updateData);
+        
+        // Log activity: update asset status
+        ActivityService::logUpdate($asset, $request->user()->id, $oldValues, $request);
 
         // If user marks asset as received, align related request status to completed/received
         if (($updateData['status'] ?? null) === 'received') {
