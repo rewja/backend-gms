@@ -313,7 +313,7 @@ class TodoController extends Controller
             'target_duration_value' => 'nullable|integer|min:1',
             'target_duration_unit' => 'nullable|in:minutes,hours',
             'todo_type' => 'required|in:rutin,tambahan',
-            'target_category' => 'required|in:all,ob,driver,security',
+            'target_category' => 'required|in:all,ob,driver,security,magang_pkl',
             'target_user_id' => 'nullable|exists:users,id', // legacy
             'selected_user_ids' => 'nullable|array',
             'selected_user_ids.*' => 'exists:users,id',
@@ -558,7 +558,7 @@ class TodoController extends Controller
             'target_duration_value' => 'nullable|integer|min:1',
             'target_duration_unit' => 'nullable|in:minutes,hours',
             'todo_type' => 'nullable|in:rutin,tambahan',
-            'target_category' => 'nullable|in:all,ob,driver,security',
+            'target_category' => 'nullable|in:all,ob,driver,security,magang_pkl',
             // routine definition (if admin wants to adjust definition fields stored with each row)
             'recurrence_start_date' => 'nullable|date',
             'recurrence_interval' => 'nullable|integer|min:1',
@@ -1450,7 +1450,7 @@ class TodoController extends Controller
             'title' => 'required|string',
             'recurrence_interval' => 'nullable|integer',
             'recurrence_unit' => 'nullable|in:day,week,month',
-            'target_category' => 'nullable|in:all,ob,driver,security',
+            'target_category' => 'nullable|in:all,ob,driver,security,magang_pkl',
             'user_id' => 'nullable|integer',
             'recurrence_count' => 'nullable|integer',
         ]);
