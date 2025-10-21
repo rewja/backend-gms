@@ -47,27 +47,22 @@ class TodoController extends Controller
 
         $ratio = $actualDuration / $targetDuration;
         
-        if ($ratio <= 0.5) {
-            // Completed in half the target time or less - excellent
-            return 95;
-        } elseif ($ratio <= 0.75) {
-            // Completed in 75% of target time - very good
-            return 85;
-        } elseif ($ratio <= 1.0) {
-            // Completed within target time - good
-            return 75;
+        // New logic: ≤100% target = perfect (5.0), >100% = penalty
+        if ($ratio <= 1.0) {
+            // Completed within or faster than target time - perfect
+            return 5.0;
         } elseif ($ratio <= 1.25) {
-            // Completed in 125% of target time - acceptable
-            return 60;
+            // Completed in 125% of target time - good (4.0-5.0)
+            return 5.0 - (($ratio - 1.0) * 4.0);
         } elseif ($ratio <= 1.5) {
-            // Completed in 150% of target time - below average
-            return 45;
+            // Completed in 150% of target time - acceptable (3.0-4.0)
+            return 4.0 - (($ratio - 1.25) * 4.0);
         } elseif ($ratio <= 2.0) {
-            // Completed in 200% of target time - poor
-            return 30;
+            // Completed in 200% of target time - poor (2.0-3.0)
+            return 3.0 - (($ratio - 1.5) * 2.0);
         } else {
-            // Completed in more than 200% of target time - very poor
-            return 15;
+            // Completed in more than 200% of target time - very poor (1.0-2.0)
+            return max(1.0, 2.0 - (($ratio - 2.0) * 0.5));
         }
     }
 
@@ -1019,17 +1014,14 @@ class TodoController extends Controller
         ]);
 
         // Automatic warning points based on rating
-        if ($automaticRating !== null && $automaticRating < 60) {
+        if ($automaticRating !== null && $automaticRating < 2.5) {
             $points = 0;
             $level = null;
             
-            if ($automaticRating < 30) {
+            if ($automaticRating < 1.5) {
                 $points = 100; // Very poor performance
                 $level = 'high';
-            } elseif ($automaticRating < 45) {
-                $points = 75; // Poor performance
-                $level = 'high';
-            } elseif ($automaticRating < 60) {
+            } elseif ($automaticRating < 2.5) {
                 $points = 50; // Below average performance
                 $level = 'medium';
             }
