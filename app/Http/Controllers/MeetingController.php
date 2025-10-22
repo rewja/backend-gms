@@ -177,6 +177,108 @@ class MeetingController extends Controller
         return response()->json(['message' => 'Meeting force ended', 'meeting' => $meeting]);
     }
 
+    // GA checking endpoint
+    public function gaCheck(Request $request, $id)
+    {
+        $meeting = Meeting::findOrFail($id);
+        
+        // Only admin_ga can check
+        if ($request->user()->role !== 'admin_ga') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $data = $request->validate([
+            'status' => 'required|in:approved,rejected',
+            'notes' => 'nullable|string'
+        ]);
+
+        $meeting->update([
+            'ga_check_status' => $data['status'],
+            'checked_by_ga' => $request->user()->id,
+            'ga_checked_at' => now(),
+            'ga_check_notes' => $data['notes'] ?? null
+        ]);
+
+        // Log activity
+        ActivityService::logUpdate($meeting, $request->user()->id, $request, []);
+
+        return response()->json([
+            'message' => 'GA check completed',
+            'meeting' => $meeting->fresh()
+        ]);
+    }
+
+    // GA Manager checking endpoint
+    public function gaManagerCheck(Request $request, $id)
+    {
+        $meeting = Meeting::findOrFail($id);
+        
+        // Only admin_ga_manager can check
+        if ($request->user()->role !== 'admin_ga_manager') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $data = $request->validate([
+            'status' => 'required|in:approved,rejected',
+            'notes' => 'nullable|string'
+        ]);
+
+        $meeting->update([
+            'ga_manager_check_status' => $data['status'],
+            'checked_by_ga_manager' => $request->user()->id,
+            'ga_manager_checked_at' => now(),
+            'ga_manager_check_notes' => $data['notes'] ?? null
+        ]);
+
+        // Log activity
+        ActivityService::logUpdate($meeting, $request->user()->id, $request, []);
+
+        return response()->json([
+            'message' => 'GA Manager check completed',
+            'meeting' => $meeting->fresh()
+        ]);
+    }
+
+    // Cancel meeting endpoint
+    public function cancel(Request $request, $id)
+    {
+        $meeting = Meeting::findOrFail($id);
+        
+        // Only admin_ga and admin_ga_manager can cancel
+        if (!in_array($request->user()->role, ['admin_ga', 'admin_ga_manager'])) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $meeting->update(['status' => 'canceled']);
+
+        // Log activity
+        ActivityService::logUpdate($meeting, $request->user()->id, $request, []);
+
+        return response()->json([
+            'message' => 'Meeting canceled',
+            'meeting' => $meeting->fresh()
+        ]);
+    }
+
+    // Auto update meeting status based on time
+    public function updateStatusAutomatically()
+    {
+        $now = now();
+        
+        // Update scheduled meetings to ongoing if start time has passed
+        Meeting::where('status', 'scheduled')
+            ->where('start_time', '<=', $now)
+            ->where('end_time', '>', $now)
+            ->update(['status' => 'ongoing']);
+
+        // Update ongoing meetings to ended if end time has passed
+        Meeting::where('status', 'ongoing')
+            ->where('end_time', '<=', $now)
+            ->update(['status' => 'ended']);
+
+        return response()->json(['message' => 'Meeting statuses updated automatically']);
+    }
+
     private function authorizeUser(Request $request, Meeting $meeting): void
     {
         if ($request->user()->role !== 'admin_ga') {

@@ -201,12 +201,16 @@ Route::middleware(['auth:sanctum', 'role:user,admin_ga,admin_ga_manager,super_ad
 Route::middleware('auth:sanctum')->prefix('meetings')->group(function () {
     Route::get('/', [MeetingController::class, 'index']);
     Route::get('/stats', [MeetingController::class, 'stats']);
+    Route::patch('/update-status-automatically', [MeetingController::class, 'updateStatusAutomatically'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
     Route::get('/{id}', [MeetingController::class, 'show']);
     Route::post('/', [MeetingController::class, 'store']);
     Route::patch('/{id}', [MeetingController::class, 'update']);
     Route::patch('/{id}/start', [MeetingController::class, 'start']);
     Route::patch('/{id}/end', [MeetingController::class, 'end']);
     Route::patch('/{id}/force-end', [MeetingController::class, 'forceEnd'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
+    Route::patch('/{id}/cancel', [MeetingController::class, 'cancel'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
+    Route::patch('/{id}/ga-check', [MeetingController::class, 'gaCheck'])->middleware('role:admin_ga');
+    Route::patch('/{id}/ga-manager-check', [MeetingController::class, 'gaManagerCheck'])->middleware('role:admin_ga_manager');
     Route::delete('/{meeting}', [MeetingController::class, 'destroy']);
 });
 
