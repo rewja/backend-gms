@@ -134,7 +134,7 @@ class TodoController extends Controller
     // User: list own todos
     public function index(Request $request)
     {
-        $todos = $request->user()->todos()->with('warnings')->latest()->get();
+        $todos = $request->user()->todos()->with(['user', 'warnings'])->latest()->get();
         return TodoResource::collection($todos);
     }
 

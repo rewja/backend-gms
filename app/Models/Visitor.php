@@ -15,6 +15,7 @@ class Visitor extends Model
         'meet_with',
         'purpose',
         'origin',
+        'location',
         'visit_time',
         'check_in',
         'check_out',

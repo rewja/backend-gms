@@ -10,6 +10,7 @@ use App\Http\Controllers\AssetController;
 use App\Http\Controllers\MeetingController;
 use App\Http\Controllers\VisitorController;
 use App\Http\Controllers\ActivityController;
+use App\Http\Controllers\DashboardController;
 use Illuminate\Http\Request;
 
 /*
@@ -22,6 +23,11 @@ use Illuminate\Http\Request;
 Route::prefix('auth')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
     Route::post('/logout', [AuthController::class, 'logout'])->middleware(['auth:sanctum', 'throttle:60,1']);
+});
+
+// ---------------- DASHBOARD ----------------
+Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin'])->prefix('admin/dashboard')->group(function () {
+    Route::get('/', [DashboardController::class, 'index']);
 });
 
 // ---------------- USERS (managed by admin) ----------------
@@ -239,6 +245,20 @@ Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin']
     Route::put('/{id}', [VisitorController::class, 'update']);
     Route::patch('/{id}', [VisitorController::class, 'update']);
     // Allow form-data POST for update to avoid multipart PUT/PATCH issues
+    Route::post('/{id}', [VisitorController::class, 'update']);
+    Route::delete('/{id}', [VisitorController::class, 'destroy']);
+    Route::post('/{id}/check-in', [VisitorController::class, 'checkIn']);
+    Route::post('/{id}/check-out', [VisitorController::class, 'checkOut']);
+});
+
+// ---------------- ADMIN VISITORS (for frontend compatibility) ----------------
+Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin'])->prefix('admin/visitors')->group(function () {
+    Route::get('/', [VisitorController::class, 'index']);
+    Route::get('/stats', [VisitorController::class, 'stats']);
+    Route::post('/', [VisitorController::class, 'store']);
+    Route::get('/{id}', [VisitorController::class, 'show']);
+    Route::put('/{id}', [VisitorController::class, 'update']);
+    Route::patch('/{id}', [VisitorController::class, 'update']);
     Route::post('/{id}', [VisitorController::class, 'update']);
     Route::delete('/{id}', [VisitorController::class, 'destroy']);
     Route::post('/{id}/check-in', [VisitorController::class, 'checkIn']);

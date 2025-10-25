@@ -47,6 +47,7 @@ class VisitorController extends Controller
                 'meet_with' => 'required|string|max:150',
                 'purpose' => 'required|string|max:300',
                 'origin' => 'nullable|string|max:150',
+                'location' => 'nullable|string|max:150',
                 'ktp_image' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
                 'face_image' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
             ]);
@@ -158,6 +159,7 @@ class VisitorController extends Controller
                 'meet_with' => $data['meet_with'],
                 'purpose' => $data['purpose'],
                 'origin' => $data['origin'] ?? null,
+                'location' => $data['location'] ?? null,
                 'visit_time' => $now,
                 'check_in' => $now, // set at registration time
                 'ktp_image_path' => $ktpPath,
@@ -216,16 +218,35 @@ class VisitorController extends Controller
     // Admin: visitor statistics
     public function stats()
     {
+        $today = Carbon::today('Asia/Jakarta');
+        $yesterday = $today->copy()->subDay();
+        $thisWeek = $today->copy()->startOfWeek();
+        $thisMonth = $today->copy()->startOfMonth();
+        $thisYear = $today->copy()->startOfYear();
+
+        // Basic stats
+        $basicStats = [
+            'total_today' => Visitor::whereDate('created_at', $today)->count(),
+            'total_yesterday' => Visitor::whereDate('created_at', $yesterday)->count(),
+            'total_this_week' => Visitor::where('created_at', '>=', $thisWeek)->count(),
+            'total_this_month' => Visitor::where('created_at', '>=', $thisMonth)->count(),
+            'total_this_year' => Visitor::where('created_at', '>=', $thisYear)->count(),
+            'pending' => Visitor::where('status', 'pending')->count(),
+            'checked_in' => Visitor::where('status', 'checked_in')->count(),
+            'checked_out' => Visitor::where('status', 'checked_out')->count(),
+        ];
+
+        // Daily stats for charts
         $daily = \DB::table('visitors')
-            ->selectRaw('DATE(check_in) as date, COUNT(*) as total')
-            ->groupByRaw('DATE(check_in)')
-            ->orderByRaw('DATE(check_in) DESC')
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as total')
+            ->groupByRaw('DATE(created_at)')
+            ->orderByRaw('DATE(created_at) DESC')
             ->limit(30)
             ->get();
 
         $driver = \DB::connection()->getDriverName();
-        $monthExpr = $driver === 'mysql' ? 'DATE_FORMAT(check_in, "%Y-%m")' : 'strftime("%Y-%m", check_in)';
-        $yearExpr = $driver === 'mysql' ? 'DATE_FORMAT(check_in, "%Y")'   : 'strftime("%Y", check_in)';
+        $monthExpr = $driver === 'mysql' ? 'DATE_FORMAT(created_at, "%Y-%m")' : 'strftime("%Y-%m", created_at)';
+        $yearExpr = $driver === 'mysql' ? 'DATE_FORMAT(created_at, "%Y")'   : 'strftime("%Y", created_at)';
 
         $monthly = \DB::table('visitors')
             ->selectRaw("{$monthExpr} as ym, COUNT(*) as total")
@@ -242,6 +263,7 @@ class VisitorController extends Controller
             ->get();
 
         return response()->json([
+            'basic' => $basicStats,
             'daily' => $daily,
             'monthly' => $monthly,
             'yearly' => $yearly,
@@ -262,6 +284,7 @@ class VisitorController extends Controller
                 'meet_with' => 'sometimes|required|string|max:150',
                 'purpose' => 'sometimes|required|string|max:300',
                 'origin' => 'nullable|string|max:150',
+                'location' => 'nullable|string|max:150',
                 'ktp_image' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
                 'face_image' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
             ]);

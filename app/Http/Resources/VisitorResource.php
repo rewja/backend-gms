@@ -37,6 +37,7 @@ class VisitorResource extends JsonResource
             'person_to_meet' => $this->person_to_meet, // Legacy field for compatibility
             'purpose' => $this->purpose,
             'origin' => $this->origin,
+            'location' => $this->location,
             // visit_time uses same style as todos' formatted duration
             'visit_time' => $durationText,
             'check_in' => $checkIn?->locale('id')->translatedFormat('l, d F Y H:i:s'),

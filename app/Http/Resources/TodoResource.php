@@ -141,6 +141,14 @@ class TodoResource extends JsonResource
             'checked_by' => $checkerDisplay,
             'checker_display' => $checkerDisplay,
             'notes' => $this->notes,
+            // Include user data if relation is loaded
+            'user' => $this->when($this->relationLoaded('user'), [
+                'id' => $this->user?->id,
+                'name' => $this->user?->name,
+                'email' => $this->user?->email,
+                'role' => $this->user?->role,
+                'category' => $this->user?->category,
+            ]),
             'due_date' => $this->due_date,
             'scheduled_date' => $this->scheduled_date,
             'target_start_at' => $formatJakarta($this->target_start_at),
