@@ -46,23 +46,27 @@ class TodoController extends Controller
         }
 
         $ratio = $actualDuration / $targetDuration;
-        
-        // New logic: ≤100% target = perfect (5.0), >100% = penalty
+
+        // Rating scale 1-5
+        // ≤ 100% target time: Rating 5 (sempurna)
         if ($ratio <= 1.0) {
-            // Completed within or faster than target time - perfect
-            return 5.0;
-        } elseif ($ratio <= 1.25) {
-            // Completed in 125% of target time - good (4.0-5.0)
-            return 5.0 - (($ratio - 1.0) * 4.0);
-        } elseif ($ratio <= 1.5) {
-            // Completed in 150% of target time - acceptable (3.0-4.0)
-            return 4.0 - (($ratio - 1.25) * 4.0);
-        } elseif ($ratio <= 2.0) {
-            // Completed in 200% of target time - poor (2.0-3.0)
-            return 3.0 - (($ratio - 1.5) * 2.0);
-        } else {
-            // Completed in more than 200% of target time - very poor (1.0-2.0)
-            return max(1.0, 2.0 - (($ratio - 2.0) * 0.5));
+            return 5;
+        }
+        // 100% - 125% target time: Rating 4
+        elseif ($ratio <= 1.25) {
+            return 4;
+        }
+        // 125% - 150% target time: Rating 3
+        elseif ($ratio <= 1.5) {
+            return 3;
+        }
+        // 150% - 200% target time: Rating 2
+        elseif ($ratio <= 2.0) {
+            return 2;
+        }
+        // > 200% target time: Rating 1
+        else {
+            return 1;
         }
     }
 
@@ -198,7 +202,9 @@ class TodoController extends Controller
         if ($request->filled('user_id')) {
             $userId = (int) $request->input('user_id');
             $totals = \App\Models\TodoWarning::query()
-                ->whereHas('todo', function ($q) use ($userId) { $q->where('user_id', $userId); })
+                ->whereHas('todo', function ($q) use ($userId) {
+                    $q->where('user_id', $userId);
+                })
                 ->selectRaw('SUM(points) as total_points, SUM(CASE WHEN level="low" THEN points ELSE 0 END) as low_points, SUM(CASE WHEN level="medium" THEN points ELSE 0 END) as medium_points, SUM(CASE WHEN level="high" THEN points ELSE 0 END) as high_points')
                 ->first();
 
@@ -273,7 +279,9 @@ class TodoController extends Controller
         $todos = Todo::with(['user', 'warnings'])->where('user_id', $userId)->latest()->get();
 
         $totals = \App\Models\TodoWarning::query()
-            ->whereHas('todo', function ($q) use ($userId) { $q->where('user_id', $userId); })
+            ->whereHas('todo', function ($q) use ($userId) {
+                $q->where('user_id', $userId);
+            })
             ->selectRaw('SUM(points) as total_points, SUM(CASE WHEN level="low" THEN points ELSE 0 END) as low_points, SUM(CASE WHEN level="medium" THEN points ELSE 0 END) as medium_points, SUM(CASE WHEN level="high" THEN points ELSE 0 END) as high_points')
             ->first();
 
@@ -329,10 +337,10 @@ class TodoController extends Controller
             unset($data['target_user_id']);
             $data['status'] = 'not_started';
             $todo = Todo::create($data);
-            
+
             // Log activity
             ActivityService::logCreate($todo, $request->user()->id, $request);
-            
+
             return response()->json([
                 'message' => 'Todo created successfully',
                 'todo' => new TodoResource($todo)
@@ -399,7 +407,9 @@ class TodoController extends Controller
                                 $totalCreated++;
                                 $routineOccurrenceTotal++;
                                 $routineDates[] = $payload['scheduled_date'];
-                                if (count($routineSampleIds) < 5) { $routineSampleIds[] = $todo->id; }
+                                if (count($routineSampleIds) < 5) {
+                                    $routineSampleIds[] = $todo->id;
+                                }
                             }
                             if ($repeatCount > 0 && $totalCreated >= $repeatCount) break;
                             $cursor->addDays($interval);
@@ -409,7 +419,7 @@ class TodoController extends Controller
                         $cursor = $windowStart->copy()->startOfWeek(Carbon::MONDAY); // Start from Monday
                         $totalCreated = 0;
                         while ($cursor->lte($windowEnd)) {
-                            $weekDays = !empty($daysOfWeek) ? $daysOfWeek : [ (int)$cursor->copy()->dayOfWeek ];
+                            $weekDays = !empty($daysOfWeek) ? $daysOfWeek : [(int)$cursor->copy()->dayOfWeek];
                             sort($weekDays);
                             foreach ($weekDays as $dow) {
                                 // Convert from frontend format to Carbon format
@@ -435,7 +445,9 @@ class TodoController extends Controller
                                     $totalCreated++;
                                     $routineOccurrenceTotal++;
                                     $routineDates[] = $payload['scheduled_date'];
-                                    if (count($routineSampleIds) < 5) { $routineSampleIds[] = $todo->id; }
+                                    if (count($routineSampleIds) < 5) {
+                                        $routineSampleIds[] = $todo->id;
+                                    }
                                 }
                                 if ($repeatCount > 0 && $totalCreated >= $repeatCount) break 2;
                             }
@@ -462,7 +474,9 @@ class TodoController extends Controller
                                 $totalCreated++;
                                 $routineOccurrenceTotal++;
                                 $routineDates[] = $payload['scheduled_date'];
-                                if (count($routineSampleIds) < 5) { $routineSampleIds[] = $todo->id; }
+                                if (count($routineSampleIds) < 5) {
+                                    $routineSampleIds[] = $todo->id;
+                                }
                             }
                             if ($repeatCount > 0 && $totalCreated >= $repeatCount) break;
                             $cursor->addMonths($interval);
@@ -487,13 +501,17 @@ class TodoController extends Controller
                                 $totalCreated++;
                                 $routineOccurrenceTotal++;
                                 $routineDates[] = $payload['scheduled_date'];
-                                if (count($routineSampleIds) < 5) { $routineSampleIds[] = $todo->id; }
+                                if (count($routineSampleIds) < 5) {
+                                    $routineSampleIds[] = $todo->id;
+                                }
                             }
                             if ($repeatCount > 0 && $totalCreated >= $repeatCount) break;
                             $cursor->addYears($interval);
                         }
                     }
-                    if ($totalCreated > 0) { $routineTouchedUsers++; }
+                    if ($totalCreated > 0) {
+                        $routineTouchedUsers++;
+                    }
                 } else {
                     // Non-routine: single todo per user
                     $todo = Todo::create($base);
@@ -521,7 +539,7 @@ class TodoController extends Controller
                     sort($routineDates);
                     $summary['created_range'] = [
                         'from' => $routineDates[0],
-                        'to' => $routineDates[count($routineDates)-1],
+                        'to' => $routineDates[count($routineDates) - 1],
                     ];
                 }
                 ActivityService::logCreateRoutineBatch($request->user()->id, $summary, $request);
@@ -604,17 +622,17 @@ class TodoController extends Controller
                 ], 422);
             }
 
-        $data = $request->validate([
-            'title' => 'sometimes|string|max:150',
-            'description' => 'nullable|string',
-            'priority' => 'nullable|in:low,medium,high',
-            'due_date' => 'nullable|date|after_or_equal:today',
-            'scheduled_date' => 'nullable|date|after_or_equal:today',
-            'target_start_at' => 'nullable|date|after_or_equal:now',
-            'target_end_at' => 'nullable|date|after:target_start_at'
-        ]);
+            $data = $request->validate([
+                'title' => 'sometimes|string|max:150',
+                'description' => 'nullable|string',
+                'priority' => 'nullable|in:low,medium,high',
+                'due_date' => 'nullable|date|after_or_equal:today',
+                'scheduled_date' => 'nullable|date|after_or_equal:today',
+                'target_start_at' => 'nullable|date|after_or_equal:now',
+                'target_end_at' => 'nullable|date|after:target_start_at'
+            ]);
 
-            foreach (['title','description','priority','due_date','scheduled_date','target_start_at','target_end_at'] as $key) {
+            foreach (['title', 'description', 'priority', 'due_date', 'scheduled_date', 'target_start_at', 'target_end_at'] as $key) {
                 if (array_key_exists($key, $data)) {
                     $todo->$key = $data[$key];
                 }
@@ -633,7 +651,7 @@ class TodoController extends Controller
         if (in_array($currentStatus, ['checking', 'evaluating'])) {
             // Evidence is mandatory for update during checking
             $hasEvidence = $request->hasFile('evidence') ||
-                          (is_array($request->file('evidence')) && count(array_filter($request->file('evidence'))) > 0);
+                (is_array($request->file('evidence')) && count(array_filter($request->file('evidence'))) > 0);
 
             if (!$hasEvidence) {
                 return response()->json([
@@ -647,7 +665,7 @@ class TodoController extends Controller
                 return response()->json([
                     'message' => 'No evidence files found'
                 ], 422);
-}
+            }
 
             $now = Carbon::now();
             $folder = $this->getEvidenceFolder($now, $request->user()->name);
@@ -678,7 +696,7 @@ class TodoController extends Controller
             }
 
             // Filter out null files and limit to maximum 5 files
-            $evidenceFiles = array_filter($evidenceFiles, function($file) {
+            $evidenceFiles = array_filter($evidenceFiles, function ($file) {
                 return $file !== null && $file->isValid();
             });
             $evidenceFiles = array_slice($evidenceFiles, 0, 5);
@@ -851,7 +869,7 @@ class TodoController extends Controller
 
             // Evidence is mandatory for submitForChecking
             $hasEvidence = $request->hasFile('evidence') ||
-                          (is_array($request->file('evidence')) && count(array_filter($request->file('evidence'))) > 0);
+                (is_array($request->file('evidence')) && count(array_filter($request->file('evidence'))) > 0);
 
             if (!$hasEvidence) {
                 return response()->json([
@@ -897,7 +915,7 @@ class TodoController extends Controller
             }
 
             // Filter out null files and limit to maximum 5 files
-            $evidenceFiles = array_filter($evidenceFiles, function($file) {
+            $evidenceFiles = array_filter($evidenceFiles, function ($file) {
                 return $file !== null && $file->isValid();
             });
             $evidenceFiles = array_slice($evidenceFiles, 0, 5);
@@ -940,7 +958,6 @@ class TodoController extends Controller
                 'message' => 'Todo submitted for checking',
                 'todo' => new TodoResource($todo)
             ]);
-
         } catch (\Exception $e) {
             Log::error('SubmitForChecking Error', [
                 'error' => $e->getMessage(),
@@ -985,8 +1002,8 @@ class TodoController extends Controller
         $targetDuration = null;
         if ($todo->target_duration_value && $todo->target_duration_unit) {
             // Use new target_duration fields
-            $targetDuration = $todo->target_duration_unit === 'hours' 
-                ? $todo->target_duration_value * 60 
+            $targetDuration = $todo->target_duration_unit === 'hours'
+                ? $todo->target_duration_value * 60
                 : $todo->target_duration_value;
         } elseif ($todo->target_start_at && $todo->target_end_at) {
             // Fallback to old method for backward compatibility
@@ -1017,7 +1034,7 @@ class TodoController extends Controller
         if ($automaticRating !== null && $automaticRating < 2.5) {
             $points = 0;
             $level = null;
-            
+
             if ($automaticRating < 1.5) {
                 $points = 100; // Very poor performance
                 $level = 'high';
@@ -1036,8 +1053,8 @@ class TodoController extends Controller
             }
         }
 
-        $message = $data['action'] === 'approve' 
-            ? 'Todo approved and completed' 
+        $message = $data['action'] === 'approve'
+            ? 'Todo approved and completed'
             : 'Todo marked for rework';
 
         // Log activity: evaluate todo
@@ -1077,7 +1094,7 @@ class TodoController extends Controller
 
             // Check if evidence files are provided
             $hasEvidence = $request->hasFile('evidence') ||
-                          (is_array($request->file('evidence')) && count(array_filter($request->file('evidence'))) > 0);
+                (is_array($request->file('evidence')) && count(array_filter($request->file('evidence'))) > 0);
 
             if ($hasEvidence) {
                 // Simple validation that works with both single and array format
@@ -1105,7 +1122,7 @@ class TodoController extends Controller
                 }
 
                 // Filter out null files and limit to maximum 5 files
-                $evidenceFiles = array_filter($evidenceFiles, function($file) {
+                $evidenceFiles = array_filter($evidenceFiles, function ($file) {
                     return $file !== null && $file->isValid();
                 });
                 $evidenceFiles = array_slice($evidenceFiles, 0, 5);
@@ -1203,8 +1220,8 @@ class TodoController extends Controller
         $targetDuration = null;
         if ($todo->target_duration_value && $todo->target_duration_unit) {
             // Use new target_duration fields
-            $targetDuration = $todo->target_duration_unit === 'hours' 
-                ? $todo->target_duration_value * 60 
+            $targetDuration = $todo->target_duration_unit === 'hours'
+                ? $todo->target_duration_value * 60
                 : $todo->target_duration_value;
         } elseif ($todo->target_start_at && $todo->target_end_at) {
             // Fallback to old method for backward compatibility
@@ -1255,10 +1272,14 @@ class TodoController extends Controller
         // Calculate average completion time per todo
         $averageTimePerTodo = $completedTodosToday > 0 ? round($totalMinutes / $completedTodosToday, 1) : 0;
 
-        $low = 0; $medium = 0; $high = 0; $warningsCount = 0; $warningPoints = 0;
+        $low = 0;
+        $medium = 0;
+        $high = 0;
+        $warningsCount = 0;
+        $warningPoints = 0;
         $warnings = \App\Models\TodoWarning::whereHas('todo', function ($q) use ($userId) {
-                $q->where('user_id', $userId);
-            })
+            $q->where('user_id', $userId);
+        })
             ->whereBetween('created_at', [$startUtc, $endUtc])
             ->get();
         foreach ($warnings as $w) {
@@ -1483,8 +1504,8 @@ class TodoController extends Controller
             // Match routine tasks created under both new and legacy data
             ->where(function ($q) {
                 $q->where('todo_type', 'rutin')
-                  ->orWhereNotNull('recurrence_unit')
-                  ->orWhereNotNull('scheduled_date');
+                    ->orWhereNotNull('recurrence_unit')
+                    ->orWhereNotNull('scheduled_date');
             })
             ->where(function ($q) use ($interval, $unit) {
                 $q->whereNull('recurrence_interval')->orWhere('recurrence_interval', $interval);
@@ -1567,5 +1588,44 @@ class TodoController extends Controller
 
         return response()->json(['message' => 'Note added successfully', 'todo' => $todo]);
     }
-}
 
+    // User: export todos
+    public function export(Request $request)
+    {
+        $userId = $request->user()->id;
+        $todos = Todo::where('user_id', $userId)->get();
+
+        $filename = "todos_export_" . now()->format('Ymd_His') . ".csv";
+        $filePath = storage_path("app/public/exports/{$filename}");
+
+        // Ensure the directory exists
+        if (!file_exists(dirname($filePath))) {
+            mkdir(dirname($filePath), 0755, true);
+        }
+
+        // Open file for writing
+        $file = fopen($filePath, 'w');
+
+        // Add CSV headers
+        fputcsv($file, ['ID', 'Title', 'Description', 'Status', 'Created At', 'Updated At']);
+
+        // Add todo data
+        foreach ($todos as $todo) {
+            fputcsv($file, [
+                $todo->id,
+                $todo->title,
+                $todo->description,
+                $todo->status,
+                $todo->created_at,
+                $todo->updated_at
+            ]);
+        }
+
+        fclose($file);
+
+        // Log the export action
+        ActivityService::logExport($request->user()->id, 'Exported todos', null, null, $request);
+
+        return response()->download($filePath)->deleteFileAfterSend(true);
+    }
+}

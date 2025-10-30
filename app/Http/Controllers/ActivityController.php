@@ -17,7 +17,7 @@ class ActivityController extends Controller
     public function mine(Request $request)
     {
         $userId = $request->user()->id;
-        
+
         $query = ActivityLog::with('user')
             ->where('user_id', $userId)
             ->orderBy('created_at', 'desc');
@@ -55,7 +55,7 @@ class ActivityController extends Controller
         $this->applyFilters($query, $request);
 
         $activities = $query->orderBy('created_at', 'desc')
-                           ->paginate($request->get('per_page', 50));
+            ->paginate($request->get('per_page', 50));
 
         return response()->json([
             'success' => true,
@@ -74,8 +74,8 @@ class ActivityController extends Controller
 
         // Cache stats for 5 minutes
         $cacheKey = 'activity_stats_' . $userId . '_' . ($isAdmin ? 'admin' : 'user');
-        
-        $stats = Cache::remember($cacheKey, 300, function() use ($userId, $isAdmin) {
+
+        $stats = Cache::remember($cacheKey, 300, function () use ($userId, $isAdmin) {
             return $this->calculateStats($userId, $isAdmin);
         });
 
@@ -92,10 +92,12 @@ class ActivityController extends Controller
     public function userSummary(Request $request, $userId)
     {
         $currentUser = $request->user();
-        
+
         // Check permissions
-        if ($currentUser->id != $userId && 
-            !in_array($currentUser->role, ['admin', 'admin_ga', 'admin_ga_manager', 'super_admin'])) {
+        if (
+            $currentUser->id != $userId &&
+            !in_array($currentUser->role, ['admin', 'admin_ga', 'admin_ga_manager', 'super_admin'])
+        ) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized access'
@@ -136,22 +138,22 @@ class ActivityController extends Controller
     {
         $userId = $request->user()->id;
         $isAdmin = in_array($request->user()->role, ['admin', 'admin_ga', 'admin_ga_manager', 'super_admin']);
-        
+
         $query = ActivityLog::with('user');
-        
+
         // If not admin, only export own activities
         if (!$isAdmin) {
             $query->where('user_id', $userId);
         }
-        
+
         // Apply filters
         $this->applyFilters($query, $request);
-        
+
         $activities = $query->orderBy('created_at', 'desc')->get();
-        
+
         // Log the export activity
         ActivityService::logExport($userId, 'activity_logs', $request);
-        
+
         return response()->json([
             'success' => true,
             'data' => $activities,
@@ -165,7 +167,7 @@ class ActivityController extends Controller
     public function clearOld(Request $request)
     {
         $days = $request->input('days', 90); // Default to 90 days
-        
+
         $deleted = ActivityLog::where('created_at', '<', now()->subDays($days))->delete();
 
         return response()->json([
@@ -186,13 +188,20 @@ class ActivityController extends Controller
         }
 
         // Filter by action if specified
-        if ($request->has('action')) {
+        if ($request->has('action') && $request->action !== 'all') {
             $query->where('action', $request->action);
         }
 
         // Filter by model if specified
-        if ($request->has('model_type')) {
+        if ($request->has('model_type') && $request->model_type !== 'all') {
             $query->where('model_type', $request->model_type);
+        }
+
+        // Filter by user role if specified
+        if ($request->has('user_role') && $request->user_role !== 'all') {
+            $query->whereHas('user', function ($q) use ($request) {
+                $q->where('role', $request->user_role);
+            });
         }
 
         // Filter by date range
@@ -222,7 +231,7 @@ class ActivityController extends Controller
     {
         // Base query for filtering
         $baseQuery = ActivityLog::query();
-        
+
         // If not admin, only show their own activities
         if (!$isAdmin) {
             $baseQuery->where('user_id', $userId);
@@ -280,4 +289,3 @@ class ActivityController extends Controller
         ];
     }
 }
-
