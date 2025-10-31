@@ -151,13 +151,42 @@ class ActivityController extends Controller
 
         $activities = $query->orderBy('created_at', 'desc')->get();
 
-        // Log the export activity
-        ActivityService::logExport($userId, 'activity_logs', $request);
+        // Log the export activity (format comes from client if provided)
+        $format = $request->get('format', 'excel');
+        $menuPath = $request->get('menu_path');
+        ActivityService::logExport($userId, 'Riwayat Aktivitas', $format, $menuPath, $request);
 
         return response()->json([
             'success' => true,
             'data' => $activities,
             'message' => 'Activity logs exported successfully'
+        ]);
+    }
+
+    /**
+     * Manually log an export action from the frontend for any feature.
+     */
+    public function logExport(Request $request)
+    {
+        $request->validate([
+            'feature' => 'required|string',
+            'format' => 'required|string',
+            'menu_path' => 'nullable|string',
+        ]);
+
+        $userId = $request->user()->id;
+
+        ActivityService::logExport(
+            $userId,
+            $request->input('feature'),
+            $request->input('format'),
+            $request->input('menu_path'),
+            $request
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Export activity logged',
         ]);
     }
 

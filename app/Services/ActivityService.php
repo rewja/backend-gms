@@ -239,14 +239,20 @@ class ActivityService
     }
 
     /**
-     * Log data export.
+     * Log data export with richer context.
+     *
+     * Example description: "Ekspor Aset (Excel) — Menu: Admin > Manajemen Aset"
      */
-    public static function logExport(int $userId, string $exportType, ?Request $request = null): ActivityLog
+    public static function logExport(int $userId, string $featureLabel, string $format, ?string $menuPath = null, ?Request $request = null): ActivityLog
     {
+        $formatUpper = strtoupper($format);
+        $menuSuffix = $menuPath ? " — Menu: {$menuPath}" : '';
+        $description = "Ekspor {$featureLabel} ({$formatUpper}){$menuSuffix}";
+
         return self::log(
             $userId,
             'export',
-            "Exported {$exportType} data",
+            $description,
             null,
             null,
             null,

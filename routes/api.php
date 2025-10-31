@@ -272,6 +272,7 @@ Route::middleware(['auth:sanctum'])->prefix('activities')->group(function () {
     Route::get('/stats', [ActivityController::class, 'stats']);                  // Personal activity statistics
     Route::get('/export', [ActivityController::class, 'export']);                // Export personal activity logs
     Route::get('/user/{userId}/summary', [ActivityController::class, 'userSummary']); // User activity summary (if authorized)
+    Route::post('/log-export', [ActivityController::class, 'logExport']);        // Manual export logging from frontend
 });
 
 // Admin: manage all activity logs
