@@ -79,6 +79,49 @@ class MeetingController extends Controller
         ]);
     }
 
+    // Get pending meeting requests count for notifications
+    public function pendingCount(Request $request)
+    {
+        $userRole = $request->user()->role;
+        
+        if ($userRole === 'admin_ga') {
+            // Count meetings that need GA check (ga_check_status is null or 'pending')
+            // Exclude canceled meetings and those already checked (approved/rejected)
+            $count = Meeting::where('status', '!=', 'canceled')
+                ->where(function($query) {
+                    $query->whereNull('ga_check_status')
+                          ->orWhere('ga_check_status', 'pending');
+                })
+                ->count();
+            
+            return response()->json([
+                'count' => $count,
+                'type' => 'ga_check'
+            ]);
+        } elseif ($userRole === 'admin_ga_manager') {
+            // Count meetings that need GA Manager check (ga_manager_check_status is null or 'pending')
+            // AND already checked by GA (ga_check_status = 'approved')
+            // Exclude canceled meetings
+            $count = Meeting::where('status', '!=', 'canceled')
+                ->where('ga_check_status', 'approved')
+                ->where(function($query) {
+                    $query->whereNull('ga_manager_check_status')
+                          ->orWhere('ga_manager_check_status', 'pending');
+                })
+                ->count();
+            
+            return response()->json([
+                'count' => $count,
+                'type' => 'ga_manager_check'
+            ]);
+        }
+        
+        return response()->json([
+            'count' => 0,
+            'type' => null
+        ]);
+    }
+
     /**
      * Show the form for creating a new resource.
      */
@@ -192,6 +235,8 @@ class MeetingController extends Controller
             'notes' => 'nullable|string'
         ]);
 
+        $oldValues = $meeting->toArray();
+        
         $meeting->update([
             'ga_check_status' => $data['status'],
             'checked_by_ga' => $request->user()->id,
@@ -200,7 +245,7 @@ class MeetingController extends Controller
         ]);
 
         // Log activity
-        ActivityService::logUpdate($meeting, $request->user()->id, $request, []);
+        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
 
         return response()->json([
             'message' => 'GA check completed',
@@ -223,6 +268,8 @@ class MeetingController extends Controller
             'notes' => 'nullable|string'
         ]);
 
+        $oldValues = $meeting->toArray();
+        
         $meeting->update([
             'ga_manager_check_status' => $data['status'],
             'checked_by_ga_manager' => $request->user()->id,
@@ -231,7 +278,7 @@ class MeetingController extends Controller
         ]);
 
         // Log activity
-        ActivityService::logUpdate($meeting, $request->user()->id, $request, []);
+        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
 
         return response()->json([
             'message' => 'GA Manager check completed',
@@ -249,10 +296,12 @@ class MeetingController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        $oldValues = $meeting->toArray();
+        
         $meeting->update(['status' => 'canceled']);
 
         // Log activity
-        ActivityService::logUpdate($meeting, $request->user()->id, $request, []);
+        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
 
         return response()->json([
             'message' => 'Meeting canceled',

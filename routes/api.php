@@ -207,6 +207,7 @@ Route::middleware(['auth:sanctum', 'role:user,admin_ga,admin_ga_manager,super_ad
 Route::middleware('auth:sanctum')->prefix('meetings')->group(function () {
     Route::get('/', [MeetingController::class, 'index']);
     Route::get('/stats', [MeetingController::class, 'stats']);
+    Route::get('/pending-count', [MeetingController::class, 'pendingCount'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
     Route::patch('/update-status-automatically', [MeetingController::class, 'updateStatusAutomatically'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
     Route::get('/{id}', [MeetingController::class, 'show']);
     Route::post('/', [MeetingController::class, 'store']);
