@@ -214,6 +214,7 @@ Route::middleware('auth:sanctum')->prefix('meetings')->group(function () {
     Route::patch('/{id}', [MeetingController::class, 'update']);
     Route::patch('/{id}/start', [MeetingController::class, 'start']);
     Route::patch('/{id}/end', [MeetingController::class, 'end']);
+    Route::patch('/{id}/force-start', [MeetingController::class, 'forceStart'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
     Route::patch('/{id}/force-end', [MeetingController::class, 'forceEnd'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
     Route::patch('/{id}/cancel', [MeetingController::class, 'cancel'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
     Route::patch('/{id}/ga-check', [MeetingController::class, 'gaCheck'])->middleware('role:admin_ga');

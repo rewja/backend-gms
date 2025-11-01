@@ -212,12 +212,46 @@ class MeetingController extends Controller
         return response()->json(['message' => 'Meeting ended', 'meeting' => $meeting]);
     }
 
+    public function forceStart(Request $request, $id)
+    {
+        $meeting = Meeting::findOrFail($id);
+        
+        // Only admin_ga and admin_ga_manager can force start
+        if (!in_array($request->user()->role, ['admin_ga', 'admin_ga_manager', 'super_admin'])) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        
+        $oldValues = $meeting->toArray();
+        $meeting->update(['status' => 'ongoing']);
+        
+        // Log activity
+        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
+        
+        return response()->json([
+            'message' => 'Meeting force started',
+            'meeting' => $meeting->fresh()
+        ]);
+    }
+
     public function forceEnd(Request $request, $id)
     {
         $meeting = Meeting::findOrFail($id);
+        
+        // Only admin_ga and admin_ga_manager can force end
+        if (!in_array($request->user()->role, ['admin_ga', 'admin_ga_manager', 'super_admin'])) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        
         $oldValues = $meeting->toArray();
         $meeting->update(['status' => 'force_ended']);
-        return response()->json(['message' => 'Meeting force ended', 'meeting' => $meeting]);
+        
+        // Log activity
+        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
+        
+        return response()->json([
+            'message' => 'Meeting force ended',
+            'meeting' => $meeting->fresh()
+        ]);
     }
 
     // GA checking endpoint
