@@ -6,6 +6,9 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password as PasswordRule;
+use App\Exports\UserTemplateExport;
+use App\Imports\UserImport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class UserController extends Controller
 {
@@ -137,5 +140,71 @@ class UserController extends Controller
             'monthly' => $monthly,
             'yearly' => $yearly,
         ]);
+    }
+
+    // GA: download user import template
+    public function downloadTemplate()
+    {
+        return Excel::download(new UserTemplateExport, 'template_import_pengguna.xlsx');
+    }
+
+    // GA: import users from Excel
+    public function import(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls|max:10240', // 10MB max
+        ]);
+
+        try {
+            $import = new UserImport();
+            Excel::import($import, $request->file('file'));
+
+            $successCount = $import->getSuccessCount();
+            $errors = $import->errors();
+            $failures = $import->failures();
+
+            $totalRows = $successCount + count($failures);
+
+            $response = [
+                'message' => 'Import selesai',
+                'success_count' => $successCount,
+                'total_rows' => $totalRows,
+            ];
+
+            if (count($errors) > 0) {
+                $response['errors'] = $errors;
+            }
+
+            if (count($failures) > 0) {
+                $response['failures'] = array_map(function ($failure) {
+                    return [
+                        'row' => $failure->row(),
+                        'attribute' => $failure->attribute(),
+                        'errors' => $failure->errors(),
+                        'values' => $failure->values(),
+                    ];
+                }, $failures->toArray());
+            }
+
+            return response()->json($response, 200);
+        } catch (\Maatwebsite\Excel\Validators\ValidationException $e) {
+            $failures = $e->failures();
+            return response()->json([
+                'message' => 'Validasi gagal',
+                'success_count' => 0,
+                'failures' => array_map(function ($failure) {
+                    return [
+                        'row' => $failure->row(),
+                        'attribute' => $failure->attribute(),
+                        'errors' => $failure->errors(),
+                        'values' => $failure->values(),
+                    ];
+                }, $failures->toArray()),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Import gagal: ' . $e->getMessage(),
+            ], 422);
+        }
     }
 }

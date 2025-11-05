@@ -39,6 +39,8 @@ Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin']
     Route::delete('/{id}', [UserController::class, 'destroy']); // delete user
     Route::get('/stats/global', [UserController::class, 'stats']); // new users per month/year
     Route::get('/stats', [UserController::class, 'stats']);        // alias for frontend simplicity
+    Route::get('/template/download', [UserController::class, 'downloadTemplate']); // download import template
+    Route::post('/import', [UserController::class, 'import']);   // import users from Excel
 });
 
 // ---------------- USER PROFILE (self access) ----------------
