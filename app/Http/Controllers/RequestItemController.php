@@ -32,8 +32,10 @@ class RequestItemController extends Controller
             'item_name' => 'required|string|max:200',
             'quantity' => 'required|integer|min:1',
             'estimated_cost' => 'nullable|numeric|min:0',
-            'category' => 'nullable|string|max:100',
+            'category' => 'required|string|max:100',
             'reason' => 'nullable|string',
+            'color' => 'nullable|string|max:100',
+            'location' => 'required|string|max:255',
         ]);
 
         $data['user_id'] = $request->user()->id;
@@ -58,8 +60,10 @@ class RequestItemController extends Controller
             'item_name' => 'sometimes|required|string|max:200',
             'quantity' => 'sometimes|required|integer|min:1',
             'estimated_cost' => 'nullable|numeric|min:0',
-            'category' => 'nullable|string|max:100',
+            'category' => 'sometimes|required|string|max:100',
             'reason' => 'nullable|string',
+            'color' => 'nullable|string|max:100',
+            'location' => 'sometimes|required|string|max:255',
         ]);
 
 		$oldValues = $req->toArray();
