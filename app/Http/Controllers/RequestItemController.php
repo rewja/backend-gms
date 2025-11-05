@@ -193,15 +193,18 @@ class RequestItemController extends Controller
         ]);
     }
 
-    // GA: approve request
+    // GA: approve request (first approval)
     public function approve(Request $request, $id)
     {
         $req = RequestItem::findOrFail($id);
-        // Mark request as approved (DB enum: pending|approved|rejected|purchased)
+        
+        // Mark request as approved (first approval by GA)
+        // Status: pending -> approved (waiting for GA Manager final approval)
         $updates = [
             'status' => 'approved',
             'ga_note' => $request->ga_note ?? null,
         ];
+        
         // Stamp approver if columns exist
         if (\Illuminate\Support\Facades\Schema::hasColumn('request_items', 'approved_by')) {
             $updates['approved_by'] = $request->user()->id;
@@ -209,28 +212,14 @@ class RequestItemController extends Controller
         if (\Illuminate\Support\Facades\Schema::hasColumn('request_items', 'approved_at')) {
             $updates['approved_at'] = now();
         }
+        
+        $oldValues = $req->toArray();
 		$req->update($updates);
 
+        // Log activity: first approval
+        ActivityService::logUpdate($req, $request->user()->id, ['status' => 'pending'], $request);
 
-        // Create a procurement placeholder asset so procurement can process purchase
-        $assetController = new \App\Http\Controllers\AssetController();
-        if (method_exists($assetController, 'generateAssetCode')) {
-            $generatedCode = $assetController->generateAssetCode($req->category ?? 'Other', 'request');
-        } else {
-            $generatedCode = 'AST-' . str_pad($id, 6, '0', STR_PAD_LEFT);
-        }
-
-        \App\Models\Asset::create([
-            'name' => $req->item_name ?? ('Asset from Request #' . $req->id),
-            'request_items_id' => $req->id,
-            'asset_code' => $generatedCode ?: ('AST-' . str_pad($id, 6, '0', STR_PAD_LEFT)),
-            'category' => $req->category ?? 'General',
-            'status' => 'procurement',
-            'method' => 'purchasing',
-            'notes' => null,
-        ]);
-
-		return response()->json(['message' => 'Request approved', 'request' => $req]);
+		return response()->json(['message' => 'Request approved by GA. Waiting for GA Manager final approval.', 'request' => $req]);
     }
 
     // GA: reject request
@@ -463,6 +452,8 @@ class RequestItemController extends Controller
             'final_note' => 'nullable|string',
         ]);
 
+        $oldValues = $item->toArray();
+        
 		$item->update([
             'status' => 'final_approved',
             'final_approved_by' => $currentUser->id,
@@ -470,9 +461,31 @@ class RequestItemController extends Controller
             'final_note' => $data['final_note'] ?? null,
         ]);
 
+        // Create asset only after final approval by GA Manager
+        $assetController = new \App\Http\Controllers\AssetController();
+        if (method_exists($assetController, 'generateAssetCode')) {
+            $generatedCode = $assetController->generateAssetCode($item->category ?? 'Other', 'request');
+        } else {
+            $generatedCode = 'AST-' . str_pad($id, 6, '0', STR_PAD_LEFT);
+        }
+
+        \App\Models\Asset::create([
+            'name' => $item->item_name ?? ('Asset from Request #' . $item->id),
+            'request_items_id' => $item->id,
+            'asset_code' => $generatedCode ?: ('AST-' . str_pad($id, 6, '0', STR_PAD_LEFT)),
+            'category' => $item->category ?? 'General',
+            'status' => 'procurement',
+            'method' => 'purchasing',
+            'color' => $item->color ?? null,
+            'location' => $item->location ?? null,
+            'notes' => null,
+        ]);
+
+        // Log activity: final approval
+        ActivityService::logUpdate($item, $currentUser->id, ['status' => 'approved'], $request);
 
         return response()->json([
-            'message' => 'Request finally approved',
+            'message' => 'Request finally approved and asset created successfully',
             'request' => $item,
         ]);
     }
