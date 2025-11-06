@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Procurement;
 use App\Models\RequestItem;
+use App\Services\ActivityService;
 use Illuminate\Http\Request;
 
 class ProcurementController extends Controller
@@ -103,8 +104,24 @@ class ProcurementController extends Controller
 
             $procurement = Procurement::create($data);
 
-            // After purchase, ensure asset exists and mark states appropriately
+            // Log activity
             $req = RequestItem::find($data['request_items_id']);
+            $assetName = $req ? ($req->item_name ?? "Asset from Request #{$req->id}") : "Asset";
+            $amountFormatted = number_format($data['amount'], 0, ',', '.');
+            $description = "Membeli {$assetName} (Rp {$amountFormatted}) - Request #{$data['request_items_id']}";
+            
+            ActivityService::log(
+                $request->user()->id,
+                'purchase',
+                $description,
+                'App\\Models\\Procurement',
+                $procurement->id,
+                null,
+                $procurement->toArray(),
+                $request
+            );
+
+            // After purchase, ensure asset exists and mark states appropriately
             if ($req) {
                 // Keep request status as approved (requests only have pending/approved/rejected per your flow)
                 $req->update(['status' => 'approved']);
@@ -137,8 +154,17 @@ class ProcurementController extends Controller
                         'store_name' => $request->store_name ?? null,
                         'store_location' => $request->store_location ?? null,
                     ]);
+                    
+                    // Log asset creation
+                    ActivityService::logCreate($asset, $request->user()->id, $request);
                 } else {
                     // If it existed in procurement, move it into shipping upon purchase
+                    $oldValues = [
+                        'status' => $asset->status,
+                        'purchase_date' => $asset->purchase_date,
+                        'purchase_cost' => $asset->purchase_cost,
+                    ];
+                    
                     $asset->update([
                         'status' => 'shipping',
                         'purchase_date' => $data['purchase_date'] ?? $asset->purchase_date,
@@ -150,6 +176,9 @@ class ProcurementController extends Controller
                         'store_name' => $request->store_name ?? $asset->store_name,
                         'store_location' => $request->store_location ?? $asset->store_location,
                     ]);
+                    
+                    // Log asset update
+                    ActivityService::logUpdate($asset, $request->user()->id, $oldValues, $request);
                 }
             }
 

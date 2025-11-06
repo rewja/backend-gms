@@ -186,6 +186,8 @@ class AssetController extends Controller
 
 		$asset = Asset::create($data);
 
+        // Log activity
+        ActivityService::logCreate($asset, $request->user()->id, $request);
 
 		return response()->json(['message' => 'Asset created successfully', 'asset' => $asset], 201);
     }
@@ -230,6 +232,8 @@ class AssetController extends Controller
 		$oldValues = $asset->toArray();
 		$asset->update($data);
 
+        // Log activity
+        ActivityService::logUpdate($asset, $request->user()->id, $oldValues, $request);
 
         return response()->json(['message' => 'Asset updated successfully', 'asset' => $asset]);
     }
@@ -250,6 +254,8 @@ class AssetController extends Controller
 		$oldValues = $asset->toArray();
 		$asset->update($data);
 
+        // Log activity
+        ActivityService::logUpdate($asset, $request->user()->id, $oldValues, $request);
 
         return response()->json(['message' => 'Asset status updated', 'asset' => $asset]);
     }
@@ -257,9 +263,13 @@ class AssetController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
 		$asset = Asset::findOrFail($id);
+        
+        // Log activity before deletion
+        ActivityService::logDelete($asset, $request->user()->id, $request);
+        
 		$asset->delete();
 
         return response()->json(['message' => 'Asset deleted successfully']);
