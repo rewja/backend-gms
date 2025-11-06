@@ -348,11 +348,16 @@ class MeetingController extends Controller
     {
         $now = now();
         
-        // Update scheduled meetings to ongoing if start time has passed
+        // Update scheduled meetings to ongoing if start time has passed but end time hasn't
         Meeting::where('status', 'scheduled')
             ->where('start_time', '<=', $now)
             ->where('end_time', '>', $now)
             ->update(['status' => 'ongoing']);
+
+        // Update scheduled meetings to ended if end time has passed (missed meetings)
+        Meeting::where('status', 'scheduled')
+            ->where('end_time', '<=', $now)
+            ->update(['status' => 'ended']);
 
         // Update ongoing meetings to ended if end time has passed
         Meeting::where('status', 'ongoing')
