@@ -21,7 +21,7 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'General Admin',
                 'password' => Hash::make('password123'), // ganti sesuai kebutuhan
-                'role' => 'admin',
+                'role' => 'admin_ga',
             ]
         );
 
@@ -29,7 +29,7 @@ class DatabaseSeeder extends Seeder
         User::updateOrCreate(
             ['email' => 'procurement@example.com'],
             [
-                'name' => 'Procurement Officer',
+                'name' => 'Procurement',
                 'password' => Hash::make('password123'), // ganti sesuai kebutuhan
                 'role' => 'procurement',
             ]
