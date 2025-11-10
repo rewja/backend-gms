@@ -464,6 +464,7 @@ class MeetingController extends Controller
             'organizer_name' => 'required|string|max:255',
             'jumlah_peserta' => 'required|integer|min:1',
             'prioritas' => 'required|string|in:reguler,vip',
+            'booking_type' => 'nullable|string|in:internal,external',
             'kebutuhan' => 'nullable|array',
             'makanan_detail' => 'nullable|string',
             'minuman_detail' => 'nullable|string',
@@ -518,6 +519,12 @@ class MeetingController extends Controller
             $normalizedPriority = 'reguler'; // default fallback
         }
 
+        // Booking type normalization - use value from request or default to 'external'
+        $bookingType = strtolower($data['booking_type'] ?? 'external');
+        if (!in_array($bookingType, ['internal', 'external'])) {
+            $bookingType = 'external'; // default fallback
+        }
+
         // Create a meeting for public booking
         $meetingData = [
             'room_name' => $data['room_name'],
@@ -525,7 +532,7 @@ class MeetingController extends Controller
             'start_time' => $data['start_time'],
             'end_time' => $data['end_time'],
             'status' => 'scheduled',
-            'booking_type' => 'external',
+            'booking_type' => $bookingType,
             'organizer_name' => $data['organizer_name'],
             'jumlah_peserta' => $data['jumlah_peserta'],
             'prioritas' => $normalizedPriority,

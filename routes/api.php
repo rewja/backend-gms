@@ -79,6 +79,7 @@ Route::middleware(['auth:sanctum'])->prefix('todos')->group(function () {
     // Allow both admin and GA to access these routes
     Route::get('/all', [TodoController::class, 'indexAll'])->middleware('role:admin_ga,admin_ga_manager,super_admin'); // ?user_id=ID optional
     Route::get('/stats/global', [TodoController::class, 'statsGlobal'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
+    Route::get('/checking-count', [TodoController::class, 'checkingCount'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
     Route::get('/user/{userId}', [TodoController::class, 'indexByUser'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
     // Admin/GA update any todo (needed by AdminTodos edit)
     Route::patch('/{id}', [TodoController::class, 'updateAny'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
