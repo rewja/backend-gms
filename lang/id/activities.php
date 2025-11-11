@@ -18,6 +18,13 @@ return [
         'export' => 'Mengekspor',
         'import' => 'Mengimpor',
         'failed_login' => 'Gagal Masuk',
+        'force_start_meeting' => 'Paksa Mulai',
+        'force_end_meeting' => 'Paksa Berhenti',
+        'cancel_meeting' => 'Membatalkan',
+        'ga_approve_meeting' => 'GA Menyetujui',
+        'ga_reject_meeting' => 'GA Menolak',
+        'ga_manager_approve_meeting' => 'GA Manager Menyetujui',
+        'ga_manager_reject_meeting' => 'GA Manager Menolak',
     ],
     
     // Models

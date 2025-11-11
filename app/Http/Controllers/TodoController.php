@@ -1673,7 +1673,7 @@ class TodoController extends Controller
         fclose($file);
 
         // Log the export action
-        ActivityService::logExport($request->user()->id, 'Exported todos', null, null, $request);
+        ActivityService::logExport($request->user()->id, 'Manajemen Tugas', 'excel', 'Admin > Manajemen Tugas', $request);
 
         return response()->download($filePath)->deleteFileAfterSend(true);
     }
