@@ -295,6 +295,17 @@ class TodoController extends Controller
         ]);
     }
 
+    // Get checking todos count for admin notifications
+    public function checkingCount(Request $request)
+    {
+        // Count todos with status 'checking' that need admin review
+        $count = Todo::where('status', 'checking')->count();
+        
+        return response()->json([
+            'count' => $count
+        ]);
+    }
+
     // Admin: create todo (only admin can create todos)
     public function store(Request $request)
     {
@@ -1010,10 +1021,29 @@ class TodoController extends Controller
             $targetDuration = Carbon::parse($todo->target_start_at)->diffInMinutes(Carbon::parse($todo->target_end_at));
         }
 
-        // Calculate automatic rating based on duration vs target
+        // Calculate automatic rating based on total time from target_start to actual_end vs target duration
+        // This considers late start time in the rating calculation
         $automaticRating = null;
-        if ($data['action'] === 'approve' && $totalMinutes && $targetDuration) {
-            $automaticRating = $this->calculateAutomaticRating($totalMinutes, $targetDuration);
+        if ($data['action'] === 'approve' && $targetDuration && $todo->submitted_at) {
+            // Calculate total time from target_start_at to submitted_at (actual end)
+            // This includes any delay in starting the task
+            $totalTimeFromTargetStart = null;
+            
+            if ($todo->target_start_at) {
+                // Calculate from target start to actual end (using seconds for precision, then convert to minutes)
+                $targetStart = Carbon::parse($todo->target_start_at);
+                $actualEnd = Carbon::parse($todo->submitted_at);
+                // Use diffInRealMinutes for floating point precision (includes seconds)
+                $totalTimeFromTargetStart = $targetStart->diffInRealMinutes($actualEnd);
+            } elseif ($todo->target_duration_value && $todo->target_duration_unit) {
+                // If no target_start_at but we have target_duration, use actual duration
+                // This is a fallback for backward compatibility
+                $totalTimeFromTargetStart = $totalMinutes;
+            }
+            
+            if ($totalTimeFromTargetStart !== null && $totalTimeFromTargetStart > 0) {
+                $automaticRating = $this->calculateAutomaticRating($totalTimeFromTargetStart, $targetDuration);
+            }
         }
 
         // Determine next status based on action
@@ -1624,7 +1654,7 @@ class TodoController extends Controller
         fclose($file);
 
         // Log the export action
-        ActivityService::logExport($request->user()->id, 'Exported todos', null, null, $request);
+        ActivityService::logExport($request->user()->id, 'Manajemen Tugas', 'excel', 'Admin > Manajemen Tugas', $request);
 
         return response()->download($filePath)->deleteFileAfterSend(true);
     }

@@ -31,6 +31,27 @@ return [
 
     'connections' => [
 
+        'vis_mysql' => [
+            'driver' => 'mysql',
+            'url' => env('VIS_DB_URL'),
+            'host' => env('VIS_DB_HOST', '127.0.0.1'),
+            'port' => env('VIS_DB_PORT', '3306'),
+            'database' => env('VIS_DB_DATABASE', 'vis_db'),
+            'username' => env('VIS_DB_USERNAME', 'ibrahim'),
+            'password' => env('VIS_DB_PASSWORD', ''),
+            'unix_socket' => env('VIS_DB_SOCKET', ''),
+            'charset' => env('VIS_DB_CHARSET', 'utf8mb4'),
+            'collation' => env('VIS_DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('VIS_MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
+
         'sqlite' => [
             'driver' => 'sqlite',
             'url' => env('DB_URL'),
@@ -181,3 +202,4 @@ return [
     ],
 
 ];
+

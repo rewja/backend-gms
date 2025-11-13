@@ -79,6 +79,7 @@ Route::middleware(['auth:sanctum'])->prefix('todos')->group(function () {
     // Allow both admin and GA to access these routes
     Route::get('/all', [TodoController::class, 'indexAll'])->middleware('role:admin_ga,admin_ga_manager,super_admin'); // ?user_id=ID optional
     Route::get('/stats/global', [TodoController::class, 'statsGlobal'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
+    Route::get('/checking-count', [TodoController::class, 'checkingCount'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
     Route::get('/user/{userId}', [TodoController::class, 'indexByUser'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
     // Admin/GA update any todo (needed by AdminTodos edit)
     Route::patch('/{id}', [TodoController::class, 'updateAny'])->middleware('role:admin_ga,admin_ga_manager,super_admin');
@@ -288,3 +289,16 @@ Route::middleware(['auth:sanctum', 'role:admin_ga,admin_ga_manager,super_admin']
 });
 
 // (Debug routes removed)
+
+// VIS proxy endpoints (read-only)
+Route::prefix('v1/gms')->group(function () {
+    // VIS Proxy
+    Route::get('visitors', [\App\Http\Controllers\VisProxyController::class, 'visitors']);
+    Route::get('dashboard/stats', [\App\Http\Controllers\VisProxyController::class, 'stats']);
+    Route::get('locations', [\App\Http\Controllers\VisProxyController::class, 'locations']);
+    Route::delete('visitors/{id}', [\App\Http\Controllers\VisProxyController::class, 'destroy']);
+
+    // SSO to VIS Admin Dashboard
+    Route::get('sso/vis', [\App\Http\Controllers\SsoController::class, 'generateVisSso'])->middleware('auth:sanctum');
+});
+
