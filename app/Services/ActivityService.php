@@ -166,6 +166,72 @@ class ActivityService
     }
 
     /**
+     * Log meeting-specific actions with detailed descriptions.
+     */
+    public static function logMeetingUpdate(Model $model, int $userId, array $oldValues, ?Request $request = null): ActivityLog
+    {
+        $newValues = $model->toArray();
+        $action = 'update';
+        $description = "Updated Meeting #{$model->id}";
+        
+        // Detect specific meeting actions based on changes
+        // Priority: Check route name first, then field changes
+        
+        $routeName = $request?->route()?->getName();
+        
+        // Check for force start (status changed to ongoing via force-start route)
+        if ($routeName && str_contains($routeName, 'force-start')) {
+            $action = 'force_start_meeting';
+            $description = "Paksa Mulai Rapat #{$model->id}";
+        }
+        // Check for force end (status changed to force_ended)
+        elseif (isset($newValues['status']) && $newValues['status'] === 'force_ended' && 
+                isset($oldValues['status']) && $oldValues['status'] !== 'force_ended') {
+            $action = 'force_end_meeting';
+            $description = "Paksa Berhenti Rapat #{$model->id}";
+        }
+        // Check for cancel (status changed to canceled)
+        elseif (isset($newValues['status']) && $newValues['status'] === 'canceled' && 
+                isset($oldValues['status']) && $oldValues['status'] !== 'canceled') {
+            $action = 'cancel_meeting';
+            $description = "Membatalkan Rapat #{$model->id}";
+        }
+        // Check for GA approval/rejection (prioritize over GA Manager if both changed)
+        elseif (isset($newValues['ga_check_status']) && isset($oldValues['ga_check_status']) && 
+                $newValues['ga_check_status'] !== $oldValues['ga_check_status']) {
+            if ($newValues['ga_check_status'] === 'approved') {
+                $action = 'ga_approve_meeting';
+                $description = "GA Menyetujui Rapat #{$model->id}";
+            } elseif ($newValues['ga_check_status'] === 'rejected') {
+                $action = 'ga_reject_meeting';
+                $description = "GA Menolak Rapat #{$model->id}";
+            }
+        }
+        // Check for GA Manager approval/rejection
+        elseif (isset($newValues['ga_manager_check_status']) && isset($oldValues['ga_manager_check_status']) && 
+                $newValues['ga_manager_check_status'] !== $oldValues['ga_manager_check_status']) {
+            if ($newValues['ga_manager_check_status'] === 'approved') {
+                $action = 'ga_manager_approve_meeting';
+                $description = "GA Manager Menyetujui Rapat #{$model->id}";
+            } elseif ($newValues['ga_manager_check_status'] === 'rejected') {
+                $action = 'ga_manager_reject_meeting';
+                $description = "GA Manager Menolak Rapat #{$model->id}";
+            }
+        }
+
+        return self::log(
+            $userId,
+            $action,
+            $description,
+            get_class($model),
+            $model->id,
+            $oldValues,
+            $newValues,
+            $request
+        );
+    }
+
+    /**
      * Log model deletion.
      */
     public static function logDelete(Model $model, int $userId, ?Request $request = null): ActivityLog

@@ -226,16 +226,16 @@ class UserController extends Controller
                             $row = $index + 2; // Index 0 = Excel row 2 (1 for header + 1 for first data)
                         }
                         
-                        $attribute = method_exists($failure, 'attribute') ? $failure->attribute() : (property_exists($failure, 'attribute') ? $failure->attribute : null);
-                        $errors = method_exists($failure, 'errors') ? $failure->errors() : (property_exists($failure, 'errors') ? $failure->errors : ['Data tidak valid']);
-                        $values = method_exists($failure, 'values') ? $failure->values() : (property_exists($failure, 'values') ? $failure->values : []);
-                    } catch (\Exception $e) {
-                        // If calling methods fails, try to get as properties
-                        $row = isset($failure->row) ? $failure->row : ($index + 2);
-                        $attribute = isset($failure->attribute) ? $failure->attribute : null;
-                        $errors = isset($failure->errors) ? $failure->errors : ['Data tidak valid'];
-                        $values = isset($failure->values) ? $failure->values : [];
-                    }
+                            $attribute = method_exists($failure, 'attribute') ? $failure->attribute() : (property_exists($failure, 'attribute') ? $failure->attribute : null);
+                            $errors = method_exists($failure, 'errors') ? $failure->errors() : (property_exists($failure, 'errors') ? $failure->errors : ['Data tidak valid']);
+                            $values = method_exists($failure, 'values') ? $failure->values() : (property_exists($failure, 'values') ? $failure->values : []);
+                        } catch (\Exception $e) {
+                            // If calling methods fails, try to get as properties
+                            $row = isset($failure->row) ? $failure->row : ($index + 2);
+                            $attribute = isset($failure->attribute) ? $failure->attribute : null;
+                            $errors = isset($failure->errors) ? $failure->errors : ['Data tidak valid'];
+                            $values = isset($failure->values) ? $failure->values : [];
+                        }
                         
                         // Convert errors to array if needed
                         if (!is_array($errors)) {
@@ -366,18 +366,24 @@ class UserController extends Controller
                             }
                         }
                         
-                        // Get row number from array
-                        $rowNum = $failure['row'] ?? null;
-                        if ($rowNum === null) {
-                            // Try to get from index
-                            $rowNum = $index + 2;
+                        // Try multiple ways to get row number
+                        $rowNum = $failure['row'] ?? $failure['line'] ?? $failure['row_number'] ?? null;
+                        
+                        // If row is still null, use index + 2 (since WithHeadingRow, first data row is index 0 = Excel row 2)
+                        if ($rowNum === null || $rowNum === '?') {
+                            $rowNum = $index + 2; // Index 0 = Excel row 2 (1 for header + 1 for first data)
                         }
                         
-                        // Ensure row number is correct (Excel row, not array index)
+                        // WithHeadingRow: row() returns 1-based index for data rows (row 2 in Excel = 1)
+                        // So we need to add 1 to get the actual Excel row number
+                        // But if rowNum is already from index (already Excel row), use as is
                         if (is_numeric($rowNum) && $rowNum > 0) {
+                            // If rowNum is from failure object (1-based), add 1. If from index (already Excel row), use as is
                             if ($rowNum == 1) {
+                                // From failure object (1-based), add 1 for header
                                 $excelRow = $rowNum + 1;
                             } else {
+                                // Already Excel row number (from index or > 1)
                                 $excelRow = $rowNum;
                             }
                         } else {
@@ -388,7 +394,7 @@ class UserController extends Controller
                             'row' => $excelRow,
                             'attribute' => $failure['attribute'] ?? null,
                             'errors' => $errors,
-                            'values' => $failure['values'] ?? [],
+                            'values' => $values,
                         ];
                     }
                 }
@@ -399,61 +405,212 @@ class UserController extends Controller
             $failures = $e->failures();
             $failureData = [];
             
-            foreach ($failures as $index => $failure) {
-                $errors = [];
+            // Convert to array if it's a collection
+            $failuresArray = [];
+            if (is_array($failures)) {
+                $failuresArray = $failures;
+            } elseif (is_object($failures) && method_exists($failures, 'toArray')) {
+                $failuresArray = $failures->toArray();
+            } elseif (is_object($failures) && method_exists($failures, 'all')) {
+                $failuresArray = $failures->all();
+            } else {
+                // Try to iterate
+                foreach ($failures as $failure) {
+                    $failuresArray[] = $failure;
+                }
+            }
+            
+            foreach ($failuresArray as $index => $failure) {
+                // Handle both object and array formats
                 if (is_object($failure)) {
+                    // Use try-catch for safety
                     try {
+                        // Try multiple ways to get row number
+                        $row = null;
+                        if (method_exists($failure, 'row')) {
+                            $row = $failure->row();
+                        } elseif (property_exists($failure, 'row')) {
+                            $row = $failure->row;
+                        } elseif (method_exists($failure, 'getRow')) {
+                            $row = $failure->getRow();
+                        } elseif (isset($failure->row)) {
+                            $row = $failure->row;
+                        }
+                        
+                        // If row is still null, use index + 2 (since WithHeadingRow, first data row is index 0 = Excel row 2)
+                        if ($row === null || $row === '?') {
+                            $row = $index + 2; // Index 0 = Excel row 2 (1 for header + 1 for first data)
+                        }
+                        
                         $errors = method_exists($failure, 'errors') ? $failure->errors() : (property_exists($failure, 'errors') ? $failure->errors : ['Data tidak valid']);
+                        $attribute = method_exists($failure, 'attribute') ? $failure->attribute() : (property_exists($failure, 'attribute') ? $failure->attribute : null);
+                        $values = method_exists($failure, 'values') ? $failure->values() : (property_exists($failure, 'values') ? $failure->values : []);
+                        
+                        // Log raw errors for debugging
+                        \Log::info('Raw errors from failure', [
+                            'errors' => $errors,
+                            'errors_type' => gettype($errors),
+                            'attribute' => $attribute,
+                            'values' => $values,
+                        ]);
+                        
+                        // Ensure errors is an array
                         if (!is_array($errors)) {
                             $errors = [$errors];
                         }
+                        
+                        // Check if errors contain specific messages or are generic
+                        $hasSpecificError = false;
+                        foreach ($errors as $error) {
+                            $errorStr = is_string($error) ? strtolower($error) : '';
+                            // Check if error message is specific (not generic)
+                            if (!empty($errorStr) && 
+                                $errorStr !== 'data tidak valid' && 
+                                stripos($errorStr, 'data tidak valid') === false &&
+                                stripos($errorStr, 'validation') === false &&
+                                stripos($errorStr, 'invalid') === false) {
+                                $hasSpecificError = true;
+                                break;
+                            }
+                        }
+                        
+                        // Only use fallback if no specific error message found
+                        if (!$hasSpecificError && !empty($values)) {
+                            // Try to infer error from values
+                            $errorMessages = [];
+                            if (isset($values['email']) && User::where('email', $values['email'])->exists()) {
+                                $errorMessages[] = "Email {$values['email']} sudah terdaftar di database. Gunakan email lain";
+                            }
+                            if (isset($values['password']) && strlen($values['password']) < 8) {
+                                $errorMessages[] = "Password minimal 8 karakter";
+                            }
+                            if (isset($values['password']) && !preg_match('/[A-Z]/', $values['password'])) {
+                                $errorMessages[] = "Password harus mengandung minimal 1 huruf besar (A-Z)";
+                            }
+                            if (isset($values['password']) && !preg_match('/[a-z]/', $values['password'])) {
+                                $errorMessages[] = "Password harus mengandung minimal 1 huruf kecil (a-z)";
+                            }
+                            if (isset($values['password']) && !preg_match('/[0-9]/', $values['password'])) {
+                                $errorMessages[] = "Password harus mengandung minimal 1 angka (0-9)";
+                            }
+                            if (!empty($errorMessages)) {
+                                $errors = $errorMessages;
+                            }
+                        }
                     } catch (\Exception $ex) {
-                        $errors = ['Data tidak valid'];
+                        // If calling methods fails, try to get as properties
+                        $row = isset($failure->row) ? $failure->row : ($index + 2);
+                        $attribute = isset($failure->attribute) ? $failure->attribute : null;
+                        $errors = isset($failure->errors) ? $failure->errors : 'Data tidak valid';
+                        $values = isset($failure->values) ? $failure->values : [];
                     }
-                } else {
-                    $errors = $failure['errors'] ?? $failure['message'] ?? ['Data tidak valid'];
+                    
+                    // Convert errors to array if it's not already
                     if (!is_array($errors)) {
                         $errors = [$errors];
                     }
-                }
-                
-                // Get row number
-                $rowNum = null;
-                if (is_object($failure)) {
-                    try {
-                        if (method_exists($failure, 'row')) {
-                            $rowNum = $failure->row();
-                        } elseif (property_exists($failure, 'row')) {
-                            $rowNum = $failure->row;
+                    
+                    // WithHeadingRow: row() returns 1-based index for data rows (row 2 in Excel = 1)
+                    // So we need to add 1 to get the actual Excel row number
+                    // But if row is already from index (already Excel row), use as is
+                    if (is_numeric($row) && $row > 0) {
+                        // If row is from failure object (1-based), add 1. If from index (already Excel row), use as is
+                        if ($row == 1) {
+                            // From failure object (1-based), add 1 for header
+                            $excelRow = $row + 1;
+                        } else {
+                            // Already Excel row number (from index or > 1)
+                            $excelRow = $row;
                         }
-                    } catch (\Exception $ex) {
-                        // Ignore
-                    }
-                } else {
-                    $rowNum = $failure['row'] ?? null;
-                }
-                
-                if ($rowNum === null) {
-                    $rowNum = $index + 2;
-                }
-                
-                // Ensure correct Excel row number
-                if (is_numeric($rowNum) && $rowNum > 0) {
-                    if ($rowNum == 1) {
-                        $excelRow = $rowNum + 1;
                     } else {
-                        $excelRow = $rowNum;
+                        $excelRow = $row ?? ($index + 2);
                     }
+                    
+                    // Log for debugging - log the entire failure object
+                    \Log::info('Failure details', [
+                        'failure_type' => get_class($failure),
+                        'failure_methods' => get_class_methods($failure),
+                        'failure_properties' => get_object_vars($failure),
+                        'row' => $row,
+                        'excel_row' => $excelRow,
+                        'attribute' => $attribute,
+                        'errors' => $errors,
+                        'errors_type' => gettype($errors),
+                        'values' => $values,
+                        'values_type' => gettype($values),
+                    ]);
+                    
+                    // Ensure errors is an array and not empty
+                    if (empty($errors) || (is_array($errors) && count($errors) == 1 && $errors[0] == 'Data tidak valid')) {
+                        // Try to infer error from values
+                        if (!empty($values)) {
+                            $errorMessages = [];
+                            if (isset($values['email']) && User::where('email', $values['email'])->exists()) {
+                                $errorMessages[] = "Email {$values['email']} sudah terdaftar di database. Gunakan email lain";
+                            }
+                            if (isset($values['password']) && strlen($values['password']) < 8) {
+                                $errorMessages[] = "Password minimal 8 karakter";
+                            }
+                            if (isset($values['password']) && !preg_match('/[A-Z]/', $values['password'])) {
+                                $errorMessages[] = "Password harus mengandung minimal 1 huruf besar (A-Z)";
+                            }
+                            if (isset($values['password']) && !preg_match('/[a-z]/', $values['password'])) {
+                                $errorMessages[] = "Password harus mengandung minimal 1 huruf kecil (a-z)";
+                            }
+                            if (isset($values['password']) && !preg_match('/[0-9]/', $values['password'])) {
+                                $errorMessages[] = "Password harus mengandung minimal 1 angka (0-9)";
+                            }
+                            if (!empty($errorMessages)) {
+                                $errors = $errorMessages;
+                            }
+                        }
+                    }
+                    
+                    $failureData[] = [
+                        'row' => $excelRow,
+                        'attribute' => $attribute,
+                        'errors' => $errors,
+                        'values' => $values,
+                    ];
                 } else {
-                    $excelRow = $rowNum ?? ($index + 2);
+                    // Already an array
+                    $errors = $failure['errors'] ?? $failure['message'] ?? 'Data tidak valid';
+                    if (!is_array($errors)) {
+                        $errors = [$errors];
+                    }
+                    
+                    // Try multiple ways to get row number
+                    $rowNum = $failure['row'] ?? $failure['line'] ?? $failure['row_number'] ?? null;
+                    
+                    // If row is still null, use index + 2 (since WithHeadingRow, first data row is index 0 = Excel row 2)
+                    if ($rowNum === null || $rowNum === '?') {
+                        $rowNum = $index + 2; // Index 0 = Excel row 2 (1 for header + 1 for first data)
+                    }
+                    
+                    // WithHeadingRow: row() returns 1-based index for data rows (row 2 in Excel = 1)
+                    // So we need to add 1 to get the actual Excel row number
+                    // But if rowNum is already from index (already Excel row), use as is
+                    if (is_numeric($rowNum) && $rowNum > 0) {
+                        // If rowNum is from failure object (1-based), add 1. If from index (already Excel row), use as is
+                        // Check if rowNum is from index (>= 2) or from failure object (1)
+                        if ($rowNum == 1) {
+                            // From failure object (1-based), add 1 for header
+                            $excelRow = $rowNum + 1;
+                        } else {
+                            // Already Excel row number (from index or > 1)
+                            $excelRow = $rowNum;
+                        }
+                    } else {
+                        $excelRow = $rowNum ?? ($index + 2);
+                    }
+                    
+                    $failureData[] = [
+                        'row' => $excelRow,
+                        'attribute' => $failure['attribute'] ?? null,
+                        'errors' => $errors,
+                        'values' => $failure['values'] ?? [],
+                    ];
                 }
-                
-                $failureData[] = [
-                    'row' => $excelRow,
-                    'attribute' => is_object($failure) ? (method_exists($failure, 'attribute') ? $failure->attribute() : (property_exists($failure, 'attribute') ? $failure->attribute : null)) : ($failure['attribute'] ?? null),
-                    'errors' => $errors,
-                    'values' => is_object($failure) ? (method_exists($failure, 'values') ? $failure->values() : (property_exists($failure, 'values') ? $failure->values : [])) : ($failure['values'] ?? []),
-                ];
             }
             
             return response()->json([

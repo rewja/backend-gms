@@ -225,7 +225,7 @@ class MeetingController extends Controller
         $meeting->update(['status' => 'ongoing']);
         
         // Log activity
-        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
+        ActivityService::logMeetingUpdate($meeting, $request->user()->id, $oldValues, $request);
         
         return response()->json([
             'message' => 'Meeting force started',
@@ -246,7 +246,7 @@ class MeetingController extends Controller
         $meeting->update(['status' => 'force_ended']);
         
         // Log activity
-        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
+        ActivityService::logMeetingUpdate($meeting, $request->user()->id, $oldValues, $request);
         
         return response()->json([
             'message' => 'Meeting force ended',
@@ -279,7 +279,7 @@ class MeetingController extends Controller
         ]);
 
         // Log activity
-        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
+        ActivityService::logMeetingUpdate($meeting, $request->user()->id, $oldValues, $request);
 
         return response()->json([
             'message' => 'GA check completed',
@@ -312,7 +312,7 @@ class MeetingController extends Controller
         ]);
 
         // Log activity
-        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
+        ActivityService::logMeetingUpdate($meeting, $request->user()->id, $oldValues, $request);
 
         return response()->json([
             'message' => 'GA Manager check completed',
@@ -335,7 +335,7 @@ class MeetingController extends Controller
         $meeting->update(['status' => 'canceled']);
 
         // Log activity
-        ActivityService::logUpdate($meeting, $request->user()->id, $oldValues, $request);
+        ActivityService::logMeetingUpdate($meeting, $request->user()->id, $oldValues, $request);
 
         return response()->json([
             'message' => 'Meeting canceled',
@@ -348,10 +348,26 @@ class MeetingController extends Controller
     {
         $now = now();
         
+        // Mark meetings as expired (canceled) if not fully approved by the time meeting starts
+        // Meeting dianggap kadaluarsa jika salah satu atau kedua approval masih pending sampai waktu meeting dimulai
+        // Contoh: GA approved tapi GA Manager pending -> kadaluarsa
+        // Contoh: GA pending tapi GA Manager approved -> kadaluarsa
+        // Contoh: GA pending dan GA Manager pending -> kadaluarsa
+        Meeting::where('status', 'scheduled')
+            ->where('start_time', '<=', $now)
+            ->where(function($query) {
+                $query->where('ga_check_status', 'pending')
+                      ->orWhere('ga_manager_check_status', 'pending');
+            })
+            ->update(['status' => 'canceled']);
+        
         // Update scheduled meetings to ongoing if start time has passed but end time hasn't
+        // Hanya update jika kedua approval sudah approved (fully approved)
         Meeting::where('status', 'scheduled')
             ->where('start_time', '<=', $now)
             ->where('end_time', '>', $now)
+            ->where('ga_check_status', 'approved')
+            ->where('ga_manager_check_status', 'approved')
             ->update(['status' => 'ongoing']);
 
         // Update scheduled meetings to ended if end time has passed (missed meetings)
@@ -464,6 +480,7 @@ class MeetingController extends Controller
             'organizer_name' => 'required|string|max:255',
             'jumlah_peserta' => 'required|integer|min:1',
             'prioritas' => 'required|string|in:reguler,vip',
+            'booking_type' => 'nullable|string|in:internal,external',
             'kebutuhan' => 'nullable|array',
             'makanan_detail' => 'nullable|string',
             'minuman_detail' => 'nullable|string',
@@ -518,6 +535,12 @@ class MeetingController extends Controller
             $normalizedPriority = 'reguler'; // default fallback
         }
 
+        // Booking type normalization - use value from request or default to 'external'
+        $bookingType = strtolower($data['booking_type'] ?? 'external');
+        if (!in_array($bookingType, ['internal', 'external'])) {
+            $bookingType = 'external'; // default fallback
+        }
+
         // Create a meeting for public booking
         $meetingData = [
             'room_name' => $data['room_name'],
@@ -525,7 +548,7 @@ class MeetingController extends Controller
             'start_time' => $data['start_time'],
             'end_time' => $data['end_time'],
             'status' => 'scheduled',
-            'booking_type' => 'external',
+            'booking_type' => $bookingType,
             'organizer_name' => $data['organizer_name'],
             'jumlah_peserta' => $data['jumlah_peserta'],
             'prioritas' => $normalizedPriority,

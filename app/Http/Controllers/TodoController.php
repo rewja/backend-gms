@@ -1003,7 +1003,7 @@ class TodoController extends Controller
         $checkerRole = $request->user()->role;
         $checkerDisplay = "{$checkerName} ({$checkerRole})";
 
-        // Calculate total work time if not already set
+        // Calculate total work time if not already set (actual duration)
         $totalMinutes = $todo->total_work_time;
         if (!$totalMinutes && $todo->started_at && $todo->submitted_at) {
             $totalMinutes = Carbon::parse($todo->started_at)->diffInMinutes(Carbon::parse($todo->submitted_at));
@@ -1258,10 +1258,29 @@ class TodoController extends Controller
             $targetDuration = Carbon::parse($todo->target_start_at)->diffInMinutes(Carbon::parse($todo->target_end_at));
         }
 
-        // Calculate automatic rating based on duration vs target
+        // Calculate automatic rating based on total time from target_start to actual_end vs target duration
+        // This considers late start time in the rating calculation
         $automaticRating = null;
-        if ($todo->total_work_time && $targetDuration) {
-            $automaticRating = $this->calculateAutomaticRating($todo->total_work_time, $targetDuration);
+        if ($targetDuration && $todo->submitted_at) {
+            // Calculate total time from target_start_at to submitted_at (actual end)
+            // This includes any delay in starting the task
+            $totalTimeFromTargetStart = null;
+            
+            if ($todo->target_start_at) {
+                // Calculate from target start to actual end (using seconds for precision, then convert to minutes)
+                $targetStart = Carbon::parse($todo->target_start_at);
+                $actualEnd = Carbon::parse($todo->submitted_at);
+                // Use diffInRealMinutes for floating point precision (includes seconds)
+                $totalTimeFromTargetStart = $targetStart->diffInRealMinutes($actualEnd);
+            } elseif ($todo->target_duration_value && $todo->target_duration_unit) {
+                // If no target_start_at but we have target_duration, use actual duration
+                // This is a fallback for backward compatibility
+                $totalTimeFromTargetStart = $todo->total_work_time;
+            }
+            
+            if ($totalTimeFromTargetStart !== null && $totalTimeFromTargetStart > 0) {
+                $automaticRating = $this->calculateAutomaticRating($totalTimeFromTargetStart, $targetDuration);
+            }
         }
 
         $oldValues = $todo->toArray();
